@@ -144,8 +144,9 @@ def get_roi_from_indexes(
         logging.error(message)
         print(message)
 
-        medscan.radiomics.image.update(
-            {('scale'+(str(medscan.params.process.scale_non_text[0])).replace('.', 'dot')): 'ERROR_PROCESSING'})
+        if medscan:
+            medscan.radiomics.image.update(
+                {('scale'+(str(medscan.params.process.scale_non_text[0])).replace('.', 'dot')): 'ERROR_PROCESSING'})
 
     return vol_obj, roi_obj
 
@@ -190,7 +191,7 @@ def get_sep_roi_names(name_roi_in: str,
     ind_start = strfind(string=name_roi_in, pattern="{")
     n_roi = len(ind_start)
     ind_stop = strfind(string=name_roi_in, pattern="}")
-    ind_keep = np.ones(n_delim, dtype=np.bool)
+    ind_keep = np.ones(n_delim, dtype=bool)
     for d in np.arange(n_delim):
         for r in np.arange(n_roi):
              # Thus not indise a ROI name
@@ -730,9 +731,11 @@ def get_roi(medscan: MEDscan,
     except Exception as e:
         message = f"\n PROBLEM WITH PRE-PROCESSING OF FEATURES IN get_roi(): \n {e}"
         _logger.error(message)
+        print(message)
 
-        medscan.radiomics.image.update(
-            {('scale'+(str(medscan.params.process.scale_non_text[0])).replace('.', 'dot')): 'ERROR_PROCESSING'})
+        if medscan:
+            medscan.radiomics.image.update(
+                {('scale'+(str(medscan.params.process.scale_non_text[0])).replace('.', 'dot')): 'ERROR_PROCESSING'})
 
     return vol_obj, roi_obj
 
