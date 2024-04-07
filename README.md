@@ -39,7 +39,7 @@ The MEDimage package requires *Python 3.8* or more. If you don't have it install
 ### Package installation
 You can easily install the ``MEDimage`` package from PyPI using:
 ```
-pip install MEDimage
+pip install medimage-pkg
 ```
 
 For more installation options (Conda, Poetry...) check out the [installation documentation](https://medimage.readthedocs.io/en/latest/Installation.html).
