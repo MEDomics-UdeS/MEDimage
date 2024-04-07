@@ -156,4 +156,4 @@ def inpolygon(x_q: np.ndarray,
         vox_grid[x_ind,
                  :] += np.logical_and(vox_col_frwd % 2, vox_col_bkwd % 2)
 
-    return vox_grid.astype(dtype=np.bool)
+    return vox_grid.astype(dtype=bool)
