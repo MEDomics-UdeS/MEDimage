@@ -32,7 +32,7 @@ protobuf = "*"
 pycaret = "*"
 pydicom = "<2.0.0"
 PyWavelets = "*"
-ray[default] = "*"
+ray = { version = "*", extras = ["default"] }
 scikit_image = "*"
 scipy = "*"
 setuptools = "*"
