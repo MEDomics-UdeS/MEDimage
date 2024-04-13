@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "medimage-pkg"
-version = "0.9.2"
+version = "0.9.3"
 description = "MEDimage is a Python package for processing and extracting features from medical images"
 authors = ["MEDomics Consortium <medomics.info@gmail.com>"]
 license = "GPL-3.0"
@@ -32,7 +32,7 @@ protobuf = "*"
 pycaret = "*"
 pydicom = "<2.0.0"
 PyWavelets = "*"
-ray = "*"
+ray[default] = "*"
 scikit_image = "*"
 scipy = "*"
 setuptools = "*"
