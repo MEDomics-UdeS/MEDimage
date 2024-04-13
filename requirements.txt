@@ -15,7 +15,7 @@ protobuf
 pycaret
 pydicom<2.0.0
 PyWavelets
-ray
+ray[default]
 scikit_image
 scipy
 setuptools
