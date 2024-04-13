@@ -17,7 +17,7 @@ and optimality analysis, streamlining radiomics approaches. It complies with `in
    :show_controls:
    :show_dark:
 
-   .. image:: /figures/MEDimage-app-depicted.png
+   .. image:: /figures/InterfaceMEDimage.JPG
       :width: 500
       :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/learning
 
