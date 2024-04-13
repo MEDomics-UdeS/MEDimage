@@ -27,7 +27,7 @@ dependencies:
     - numpyencoder
     - protobuf
     - pycaret
-    - ray
+    - ray[default]
     - scikit_image
     - SimpleITK
     - scikit_learn
