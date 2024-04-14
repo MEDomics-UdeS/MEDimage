@@ -201,10 +201,11 @@ class DataManager(object):
         """
         print('--> Associating all RT objects to imaging volumes')
         n_rs = len(self.__dicom.stack_path_rs)
+        self.__dicom.stack_series_rs = list(dict.fromkeys(self.__dicom.stack_series_rs))
         if n_rs:
             for i in trange(0, n_rs):
-                try: # PUT ALL THE DICOM PATHS WITH THE SAME UID IN THE SAME PATH LIST
-                    self.__dicom.stack_series_rs = list(set(self.__dicom.stack_series_rs))
+                try: 
+                    # PUT ALL THE DICOM PATHS WITH THE SAME UID IN THE SAME PATH LIST
                     ind_series_id = self.__find_uid_cell_index(
                                                         self.__dicom.stack_series_rs[i], 
                                                         self.__dicom.cell_series_id)
@@ -274,6 +275,8 @@ class DataManager(object):
                         except:
                             frame_uid = info.FrameOfReferenceUID
                         self.__dicom.stack_frame_rs += [frame_uid]
+                    else:
+                        print("Modality not supported: ", info.Modality)
 
                 except Exception as e:
                     print(f'Error while reading: {file}, error: {e}\n')
