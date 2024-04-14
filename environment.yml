@@ -8,7 +8,7 @@ dependencies:
   - nibabel
   - pandas<2.0.0
   - pillow
-  - pydicom<2.0.0
+  - pydicom>1.2.0, <=1.3.0
   - pywavelets
   - scikit-image
   - scipy
