@@ -466,8 +466,8 @@ def cross_validation_split(
         train_data_list.append(patient_ids[train_indices])
         test_data_list.append(patient_ids[test_indices])
     
-    train_data_array = np.array(train_data_list)
-    test_data_array = np.array(test_data_list)
+    train_data_array = np.array(train_data_list, dtype=object)
+    test_data_array = np.array(test_data_list, dtype=object)
 
     return train_data_array, test_data_array
 
