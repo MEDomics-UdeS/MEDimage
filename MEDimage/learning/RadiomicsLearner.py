@@ -295,7 +295,7 @@ class RadiomicsLearner:
             optimal_threshold: float = None,
             optimization_metric: str = 'MCC',
             method : str = "pycaret",
-            use_gpu: bool = True,
+            use_gpu: bool = False,
             seed: int = None,
         ) -> Dict:
         """
@@ -338,6 +338,7 @@ class RadiomicsLearner:
                 fold=5,
                 target=temp_data.columns[-1],
                 use_gpu=use_gpu,
+                feature_selection_estimator="xgboost",
                 session_id=seed
             )
 

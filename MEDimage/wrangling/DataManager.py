@@ -652,11 +652,12 @@ class DataManager(object):
             self.csv_data = csv_data
             self.summarize()
 
-    def summarize(self):
+    def summarize(self, retrun_summary: bool = False) -> None:
         """Creates and shows a summary of processed scans organized by study, institution, scan type and roi type
 
         Args:
-            None
+            retrun_summary (bool, optional): If True, will return the summary as a dictionary.
+        
         Returns:
             None
         """
@@ -727,6 +728,9 @@ class DataManager(object):
                                                 'count' : roi_count
                                                 }, ignore_index=True)
         print(summary_df.to_markdown(index=False))
+
+        if retrun_summary:
+            return summary_df
 
     def __pre_radiomics_checks_dimensions(
         self,
