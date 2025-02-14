@@ -3,7 +3,6 @@ import logging
 import os
 import pickle
 import re
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from time import time
@@ -23,7 +22,6 @@ from tqdm import tqdm, trange
 
 from ..MEDscan import MEDscan
 from ..processing.compute_suv_map import compute_suv_map
-from ..processing.interpolation import interp_volume
 from ..processing.segmentation import get_roi_from_indexes
 from ..utils.get_file_paths import get_file_paths
 from ..utils.get_patient_names import get_patient_names
@@ -782,6 +780,10 @@ class DataManager(object):
             print("Wildcard is empty, the pre-checks will be aborted")
             return
 
+        # Updating plotting params
+        plt.rcParams["figure.figsize"] = (20,20)
+        plt.rcParams.update({'font.size': 22})
+
         # TODO: seperate by studies and scan type (MRscan, CTscan...)
         # TODO: Two summaries (df, list of names saves) -> 
         # name_save = name_save(ROI) : Glioma-Huashan-001__T1.MRscan.npy({GTV})
@@ -846,7 +848,11 @@ class DataManager(object):
                 x.grid(False)
                 plt.title(f"Voxels xy-spacing checks for {wildcard}")
                 plt.legend()
-                plt.show()
+                # Save the plot
+                if save:
+                    plt.savefig(self.paths._path_save_checks / ('Voxels_xy_check.png'))
+                else:
+                    plt.show()
             
             # Plotting z-spacing data histogram
             df_z = pd.DataFrame(z_dim["data"], columns=['data'])
@@ -860,7 +866,11 @@ class DataManager(object):
                 x.grid(False)
                 plt.title(f"Voxels z-spacing checks for {wildcard}")
                 plt.legend()
-                plt.show()
+                # Save the plot
+                if save:
+                    plt.savefig(self.paths._path_save_checks / ('Voxels_z_check.png'))
+                else:
+                    plt.show()
                 
             # Saving files using wildcard for name
             if save:
@@ -902,6 +912,10 @@ class DataManager(object):
         Returns:
             None.
         """
+        # Updating plotting params
+        plt.rcParams["figure.figsize"] = (20,20)
+        plt.rcParams.update({'font.size': 22})
+        
         if type(wildcards_window) is str:
             wildcards_window = [wildcards_window]
 
@@ -1032,7 +1046,11 @@ class DataManager(object):
                 x.xaxis.set_tick_params(pad=15)
                 plt.title(f"Intensity range checks for {wildcard}, bw={bin_width}")
                 plt.legend()
-                plt.show()
+                # Save the plot
+                if save:
+                    plt.savefig(self.paths._path_save_checks / ('Intensity_range_check_' + f'bw_{bin_width}.png'))
+                else:
+                    plt.show()
             
             # save final checks
             if save:

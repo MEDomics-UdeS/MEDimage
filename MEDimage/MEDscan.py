@@ -60,15 +60,9 @@ class MEDscan(object):
             self.data = medscan.data
         except:
             self.data = self.data()
-        try:
-            self.params = medscan.params
-        except:
-            self.params = self.Params()
-        try:
-            self.radiomics = medscan.radiomics
-        except:
-            self.radiomics = self.Radiomics()
 
+        self.params = self.Params()
+        self.radiomics = self.Radiomics()
         self.skip = False
 
     def __init_process_params(self, im_params: Dict) -> None:
@@ -90,6 +84,8 @@ class MEDscan(object):
             raise ValueError(f"The given parameters dict is not valid, no params found for {self.type} modality")
         
         # re-segmentation range processing
+        if(im_params['reSeg']['range'] and (im_params['reSeg']['range'][0] == "inf" or im_params['reSeg']['range'][0] == "-inf")):
+            im_params['reSeg']['range'][0] = -np.inf
         if(im_params['reSeg']['range'] and im_params['reSeg']['range'][1] == "inf"):
             im_params['reSeg']['range'][1] = np.inf
 
@@ -218,6 +214,22 @@ class MEDscan(object):
                 self.params.radiomics.ngtdm.dist_correction = False
         else:
             self.params.radiomics.ngtdm.dist_correction = False
+        
+        # Features to extract
+        features = [
+            "Morph", "LocalIntensity", "Stats", "IntensityHistogram", "IntensityVolumeHistogram", 
+            "GLCM", "GLRLM", "GLSZM", "GLDZM", "NGTDM", "NGLDM"
+        ]
+        if "extract" in im_params.keys():
+            self.params.radiomics.extract = im_params['extract']
+            for key in self.params.radiomics.extract:
+                if key not in features:
+                    raise ValueError(f"Invalid key in 'extract' parameter: {key} (Modality {self.type}).")
+        
+        # Ensure each feature is in the extract dictionary with a default value of True
+        for feature in features:
+            if feature not in self.params.radiomics.extract:
+                self.params.radiomics.extract[feature] = True
 
     def __init_filter_params(self, filter_params: Dict) -> None:
         """Initializes the filtering params from a given Dict.
@@ -351,54 +363,41 @@ class MEDscan(object):
                                             '_' + ih_val_name + min_val_name
 
             # IVH name
-            if not self.params.process.ivh:  # CT case
+            if self.params.process.im_range:  # The im_range defines the computation.
+                min_val_name = ((str(self.params.process.im_range[0])).replace('.', 'dot')).replace('-', 'M')
+                max_val_name = ((str(self.params.process.im_range[1])).replace('.', 'dot')).replace('-', 'M')
+                if max_val_name == 'inf':
+                    # In this case, the maximum value of the ROI is used,
+                    # so no need to report it.
+                    range_name = '_min' + min_val_name
+                elif min_val_name == '-inf' or min_val_name == 'inf':
+                    # In this case, the minimum value of the ROI is used,
+                    # so no need to report it.
+                    range_name = '_max' + max_val_name
+                else:
+                    range_name = '_min' + min_val_name + '_max' + max_val_name
+            else: 
+                # min-max of ROI will be used, no need to report it.
+                range_name = ''
+            if not self.params.process.ivh:  # CT case for example
                 ivh_algo_name = 'algoNone'
                 ivh_val_name = 'bin1'
-                if self.params.process.im_range:  # The im_range defines the computation.
-                    min_val_name = ((str(self.params.process.im_range[0])).replace(
-                        '.', 'dot')).replace('-', 'M')
-                    max_val_name = ((str(self.params.process.im_range[1])).replace(
-                        '.', 'dot')).replace('-', 'M')
-                    range_name = '_min' + min_val_name + '_max' + max_val_name
-                else:
-                    range_name = ''
             else:
-                ivh_algo_name = 'algo' + self.params.process.ivh['type']
-                if 'val' in self.params.process.ivh:
+                ivh_algo_name = 'algo' + self.params.process.ivh['type'] if 'type' in self.params.process.ivh else 'algoNone'
+                if 'val' in self.params.process.ivh and self.params.process.ivh['val']:
                     ivh_val_name = 'bin' + (str(self.params.process.ivh['val'])).replace('.', 'dot')
                 else:
                     ivh_val_name = 'binNone'
-                # The im_range defines the computation.
-                if 'type' in self.params.process.ivh and self.params.process.ivh['type'].find('FBS') >=0:
-                    if self.params.process.im_range:
-                        min_val_name = ((str(self.params.process.im_range[0])).replace(
-                            '.', 'dot')).replace('-', 'M')
-                        max_val_name = ((str(self.params.process.im_range[1])).replace(
-                            '.', 'dot')).replace('-', 'M')
-                        if max_val_name == 'inf':
-                            # In this case, the maximum value of the ROI is used,
-                            # so no need to report it.
-                            range_name = '_min' + min_val_name
-                        elif min_val_name == '-inf':
-                            # In this case, the minimum value of the ROI is used,
-                            # so no need to report it.
-                            range_name = '_max' + max_val_name
-                        else:
-                            range_name = '_min' + min_val_name + '_max' + max_val_name
-                    else:  # min-max of ROI will be used, no need to report it.
-                        range_name = ''
-                else:  # min-max of ROI will be used, no need to report it.
-                    range_name = ''
             self.params.radiomics.ivh_name = self.params.radiomics.scale_name + '_' + ivh_algo_name + '_' + ivh_val_name + range_name
 
             # Now initialize the attribute that will hold the computation results
             self.radiomics.image.update({ 
-                            'morph_3D': {self.params.radiomics.scale_name: {}},
-                            'locInt_3D': {self.params.radiomics.scale_name: {}},
-                            'stats_3D': {self.params.radiomics.scale_name: {}},
-                            'intHist_3D': {self.params.radiomics.ih_name: {}},
-                            'intVolHist_3D': {self.params.radiomics.ivh_name: {}} 
-                            })
+                'morph_3D': {self.params.radiomics.scale_name: {}},
+                'locInt_3D': {self.params.radiomics.scale_name: {}},
+                'stats_3D': {self.params.radiomics.scale_name: {}},
+                'intHist_3D': {self.params.radiomics.ih_name: {}},
+                'intVolHist_3D': {self.params.radiomics.ivh_name: {}} 
+            })
 
         except Exception as e:
             message = f"\n PROBLEM WITH PRE-PROCESSING OF FEATURES IN init_ntf_calculation(): \n {e}"
@@ -1037,7 +1036,7 @@ class MEDscan(object):
                 self.name_text_types = kwargs['name_text_types'] if 'name_text_types' in kwargs else None
                 self.processing_name = kwargs['processing_name'] if 'processing_name' in kwargs else None
                 self.scale_name = kwargs['scale_name'] if 'scale_name' in kwargs else None
-
+                self.extract = kwargs['extract'] if 'extract' in kwargs else {}
 
             class GLCM:
                 """Organizes the GLCM features extraction parameters"""

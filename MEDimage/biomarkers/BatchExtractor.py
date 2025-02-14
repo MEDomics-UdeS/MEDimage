@@ -29,7 +29,8 @@ class BatchExtractor(object):
             path_csv: Union[str, Path],
             path_params: Union[str, Path],
             path_save: Union[str, Path],
-            n_batch: int = 4
+            n_batch: int = 4,
+            skip_existing: bool = False
     ) -> None:
         """
         constructor of the BatchExtractor class 
@@ -41,6 +42,7 @@ class BatchExtractor(object):
         self.roi_types = []
         self.roi_type_labels = []
         self.n_bacth = n_batch
+        self.skip_existing = skip_existing
 
     def __load_and_process_params(self) -> Dict:
         """Load and process the computing & batch parameters from JSON file"""
@@ -82,6 +84,14 @@ class BatchExtractor(object):
         # Setting up logging settings
         logging.basicConfig(filename=log_file, level=logging.DEBUG, force=True)
 
+        # Check if features are already computed for the current scan
+        if self.skip_existing:
+            modality = name_patient.split('.')[1]
+            name_save = name_patient.split('.')[0] + f'({roi_type_label})' + f'.{modality}.json'
+            if Path(self._path_save / f'features({roi_type})' / name_save).exists():
+                logging.info("Skipping existing features for scan: {name_patient}")
+                return log_file
+
         # start timer
         t_start = time()
 
@@ -94,7 +104,7 @@ class BatchExtractor(object):
             with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
             medscan = MEDimage.MEDscan(medscan)
         except Exception as e:
-            logging.error(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
+            print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
             return None
 
         # Init processing & computation parameters
@@ -197,35 +207,44 @@ class BatchExtractor(object):
 
         # Morphological features extraction
         try:
-            morph = MEDimage.biomarkers.morph.extract_all(
-                vol=vol_obj.data, 
-                mask_int=roi_obj_int.data, 
-                mask_morph=roi_obj_morph.data,
-                res=medscan.params.process.scale_non_text,
-                intensity_type=medscan.params.process.intensity_type
-            )
+            if medscan.params.radiomics.extract['Morph']:
+                morph = MEDimage.biomarkers.morph.extract_all(
+                    vol=vol_obj.data, 
+                    mask_int=roi_obj_int.data, 
+                    mask_morph=roi_obj_morph.data,
+                    res=medscan.params.process.scale_non_text,
+                    intensity_type=medscan.params.process.intensity_type
+                )
+            else:
+                morph = None
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF MORPHOLOGICAL FEATURES {e}')
             morph = None
 
         # Local intensity features extraction
         try:
-            local_intensity = MEDimage.biomarkers.local_intensity.extract_all(
-                img_obj=vol_obj.data,
-                roi_obj=roi_obj_int.data,
-                res=medscan.params.process.scale_non_text,
-                intensity_type=medscan.params.process.intensity_type
-            )
+            if medscan.params.radiomics.extract['LocalIntensity']:
+                local_intensity = MEDimage.biomarkers.local_intensity.extract_all(
+                    img_obj=vol_obj.data,
+                    roi_obj=roi_obj_int.data,
+                    res=medscan.params.process.scale_non_text,
+                    intensity_type=medscan.params.process.intensity_type
+                )
+            else:
+                local_intensity = None
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF LOCAL INTENSITY FEATURES {e}')
             local_intensity = None
 
         # statistical features extraction
         try:
-            stats = MEDimage.biomarkers.stats.extract_all(
-                vol=vol_int_re,
-                intensity_type=medscan.params.process.intensity_type
-            )
+            if medscan.params.radiomics.extract['Stats']:
+                stats = MEDimage.biomarkers.stats.extract_all(
+                    vol=vol_int_re,
+                    intensity_type=medscan.params.process.intensity_type
+                )
+            else:
+                stats = None
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF STATISTICAL FEATURES {e}')
             stats = None
@@ -240,9 +259,12 @@ class BatchExtractor(object):
         
         # Intensity histogram features extraction
         try:
-            int_hist = MEDimage.biomarkers.intensity_histogram.extract_all(
-                vol=vol_quant_re
-            )
+            if medscan.params.radiomics.extract['IntensityHistogram']:
+                int_hist = MEDimage.biomarkers.intensity_histogram.extract_all(
+                    vol=vol_quant_re
+                )
+            else:
+                int_hist = None
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF INTENSITY HISTOGRAM FEATURES {e}')
             int_hist = None
@@ -262,12 +284,15 @@ class BatchExtractor(object):
             wd = 1
 
         # Intensity volume histogram features extraction
-        int_vol_hist = MEDimage.biomarkers.int_vol_hist.extract_all(
-                    medscan=medscan,
-                    vol=vol_quant_re,
-                    vol_int_re=vol_int_re, 
-                    wd=wd
-        )
+        if medscan.params.radiomics.extract['IntensityVolumeHistogram']:
+            int_vol_hist = MEDimage.biomarkers.int_vol_hist.extract_all(
+                        medscan=medscan,
+                        vol=vol_quant_re,
+                        vol_int_re=vol_int_re, 
+                        wd=wd
+            )
+        else:
+            int_vol_hist = None
 
         # End of Non-Texture features extraction
         logging.info(f"End of non-texture features extraction: {time() - start}\n")
@@ -372,52 +397,70 @@ class BatchExtractor(object):
 
                 # GLCM features extraction
                 try:
-                    glcm = MEDimage.biomarkers.glcm.extract_all(
-                        vol=vol_quant_re, 
-                        dist_correction=medscan.params.radiomics.glcm.dist_correction)
+                    if medscan.params.radiomics.extract['GLCM']:
+                        glcm = MEDimage.biomarkers.glcm.extract_all(
+                            vol=vol_quant_re, 
+                            dist_correction=medscan.params.radiomics.glcm.dist_correction)
+                    else:
+                        glcm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF GLCM FEATURES {e}')
                     glcm = None
 
                 # GLRLM features extraction
                 try:
-                    glrlm = MEDimage.biomarkers.glrlm.extract_all(
-                        vol=vol_quant_re,
-                        dist_correction=medscan.params.radiomics.glrlm.dist_correction)
+                    if medscan.params.radiomics.extract['GLRLM']:
+                        glrlm = MEDimage.biomarkers.glrlm.extract_all(
+                            vol=vol_quant_re,
+                            dist_correction=medscan.params.radiomics.glrlm.dist_correction)
+                    else:
+                        glrlm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF GLRLM FEATURES {e}')
                     glrlm = None
 
                 # GLSZM features extraction
                 try:
-                    glszm = MEDimage.biomarkers.glszm.extract_all(
-                        vol=vol_quant_re)
+                    if medscan.params.radiomics.extract['GLSZM']:
+                        glszm = MEDimage.biomarkers.glszm.extract_all(
+                            vol=vol_quant_re)
+                    else:
+                        glszm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF GLSZM FEATURES {e}')
                     glszm = None
 
                 # GLDZM features extraction
                 try:
-                    gldzm = MEDimage.biomarkers.gldzm.extract_all(
-                        vol_int=vol_quant_re, 
-                        mask_morph=roi_obj_morph.data)
+                    if medscan.params.radiomics.extract['GLDZM']:
+                        gldzm = MEDimage.biomarkers.gldzm.extract_all(
+                            vol_int=vol_quant_re, 
+                            mask_morph=roi_obj_morph.data)
+                    else:
+                        gldzm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF GLDZM FEATURES {e}')
                     gldzm = None
 
                 # NGTDM features extraction
                 try:
-                    ngtdm = MEDimage.biomarkers.ngtdm.extract_all(
-                        vol=vol_quant_re, 
-                        dist_correction=medscan.params.radiomics.ngtdm.dist_correction)
+                    if medscan.params.radiomics.extract['NGTDM']:
+                        ngtdm = MEDimage.biomarkers.ngtdm.extract_all(
+                            vol=vol_quant_re, 
+                            dist_correction=medscan.params.radiomics.ngtdm.dist_correction)
+                    else:
+                        ngtdm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF NGTDM FEATURES {e}')
                     ngtdm = None
 
                 # NGLDM features extraction
                 try:
-                    ngldm = MEDimage.biomarkers.ngldm.extract_all(
-                        vol=vol_quant_re)
+                    if medscan.params.radiomics.extract['NGLDM']:
+                        ngldm = MEDimage.biomarkers.ngldm.extract_all(
+                            vol=vol_quant_re)
+                    else:
+                        ngldm = None
                 except Exception as e:
                     logging.error(f'PROBLEM WITH COMPUTATION OF NGLDM FEATURES {e}')
                     ngldm = None
