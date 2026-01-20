@@ -4,7 +4,7 @@ Filters
 gabor
 --------------------------------------------
 
-.. automodule:: MEDimage.filters.gabor
+.. automodule:: MEDiml.filters.gabor
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ gabor
 laws 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.laws
+.. automodule:: MEDiml.filters.laws
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,7 +20,7 @@ laws
 log 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.log
+.. automodule:: MEDiml.filters.log
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,7 +28,7 @@ log
 mean 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.mean
+.. automodule:: MEDiml.filters.mean
    :members:
    :undoc-members:
    :show-inheritance:
@@ -36,7 +36,7 @@ mean
 wavelet 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.wavelet
+.. automodule:: MEDiml.filters.wavelet
    :members:
    :undoc-members:
    :show-inheritance:
@@ -44,7 +44,7 @@ wavelet
 apply\_filter 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.apply_filter
+.. automodule:: MEDiml.filters.apply_filter
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,7 +52,7 @@ apply\_filter
 utils 
 -----------------------------------------
 
-.. automodule:: MEDimage.filters.utils
+.. automodule:: MEDiml.filters.utils
    :members:
    :undoc-members:
    :show-inheritance:

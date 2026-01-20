@@ -35,7 +35,7 @@ def main(path_dataset: Union[str, Path]) -> None:
 
 if __name__ == "__main__":
     # setting up arguments:
-    parser = argparse.ArgumentParser(description='Re-organize dataset to follow MEDimage package conventions.')
+    parser = argparse.ArgumentParser(description='Re-organize dataset to follow MEDiml package conventions.')
     parser.add_argument("--path-dataset", required=True, help="Path to your dataset folder.")
     args = parser.parse_args()
 

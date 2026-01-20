@@ -27,9 +27,9 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'MEDimage'
-copyright = '2022, MEDimage'
-author = 'MEDimage'
+project = 'MEDiml'
+copyright = '2022, MEDiml'
+author = 'MEDiml developers'
 
 
 # -- General configuration ---------------------------------------------------

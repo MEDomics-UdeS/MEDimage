@@ -5,7 +5,7 @@ Processing
 compute\_suv\_map 
 --------------------------------------------
 
-.. automodule:: MEDimage.processing.compute_suv_map
+.. automodule:: MEDiml.processing.compute_suv_map
    :members:
    :undoc-members:
    :show-inheritance:
@@ -13,7 +13,7 @@ compute\_suv\_map
 discretization 
 -----------------------------------------
 
-.. automodule:: MEDimage.processing.discretisation
+.. automodule:: MEDiml.processing.discretisation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -21,7 +21,7 @@ discretization
 interpolation 
 -----------------------------------------
 
-.. automodule:: MEDimage.processing.interpolation
+.. automodule:: MEDiml.processing.interpolation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -29,7 +29,7 @@ interpolation
 resegmentation 
 -----------------------------------------
 
-.. automodule:: MEDimage.processing.resegmentation
+.. automodule:: MEDiml.processing.resegmentation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -37,7 +37,7 @@ resegmentation
 segmentation 
 -----------------------------------------
 
-.. automodule:: MEDimage.processing.segmentation
+.. automodule:: MEDiml.processing.segmentation
    :members:
    :undoc-members:
    :show-inheritance:

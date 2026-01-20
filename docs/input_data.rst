@@ -1,7 +1,7 @@
 Input Data
 ==========
 
-``MEDimage`` package accepts two formats of input data: `NIfTI <https://brainder.org/2012/09/23/the-nifti-file-format/>`__ 
+``MEDiml`` package accepts two formats of input data: `NIfTI <https://brainder.org/2012/09/23/the-nifti-file-format/>`__ 
 and `DICOM <https://fr.wikipedia.org/wiki/Digital_imaging_and_communications_in_medicine>`__. Each format has its own conventions
 that need to be followed. The following sections describe the norms and the conventions for each format and we recommend you process your 
 dataset in a way that respects them.
@@ -26,12 +26,12 @@ B. **RTstruct**
 
   RTstruct files define the area of significance and hold information about each region of interest (ROI). The RTstruct files are associated with their
   imaging volume using the ``(0020,000E) Series Instance UID`` or the ``(0020,0052) Frame of Reference UID`` found in the file's header. 
-  ``MEDimage`` package recommends the following:
+  ``MEDiml`` package recommends the following:
 
   - **Patient ID**: Same conventions and recommendations as the DICOM image.
   - **Series description**: Same conventions and recommendations as the DICOM image.
   - **ROI name**: Only found in DICOM RTstruct files and referenced in each element (each ROI) of the ``(3006,0020) Structure Set ROI Sequence`` list of 
-    the DICOM header, under the attribute ``(3006,0026) ROI Name`` which is a name given to each region of interest (ROI). ``MEDimage`` has no 
+    the DICOM header, under the attribute ``(3006,0026) ROI Name`` which is a name given to each region of interest (ROI). ``MEDiml`` has no 
     conventions over this field, but we recommend renaming each ROI name in a simple and logic way to differentiate them from each other. It is very 
     important to keep track of all the ROIs in your dataset since they need to be specified in the :doc:`../csv_file` of the dataset under the 
     ``ROIName`` column to be used later in your radiomics analysis.
@@ -40,21 +40,21 @@ NIfTI
 -----
 
 The NIfTI format is a simple format that only contains the image itself. Unlike DICOM, the NIfTI format does contain any
-information about the regions of interest (ROI) so it needs to be provided in other separate files. In order for ``MEDimage`` to read a NIfTI scan
+information about the regions of interest (ROI) so it needs to be provided in other separate files. In order for ``MEDMEDimlimage`` to read a NIfTI scan
 files, they need to be put in the same folder with the following names:
 
 - ``'PatientID__SeriesDescription(ROILabel).Modality.nii.gz'``: The image itself. For example: ``'STS-McGill-001__T1(GTV).MRscan.nii.gz'``.
 - ``'PatientID__SeriesDescription(ROIname).ROI.nii.gz'``: The ROI or the mask of the image. This file should contain a binary mask of the ROI. 
   For example: ``'STS-McGill-001__T1(GTV_Mass).ROI.nii.gz'``.
 
-The following figure sums up the ``MEDimage`` logic in reading data for both formats:
+The following figure sums up the ``MEDiml`` logic in reading data for both formats:
 
 .. image:: /figures/InputDataSummary.png
     :width: 1000
     :align: center
 
 If these conventions are followed, the ``DataManager`` class will be able to read the data and create the ``MEDscan`` objects that will be used
-in the radiomics analysis with no further intervention from the user. For instance, ``MEDimage`` package is capable of automatically updating 
+in the radiomics analysis with no further intervention from the user. For instance, ``MEDiml`` package is capable of automatically updating 
 the fields of all the DICOM files as long as the dataset is organized in the following way:
 ::
 

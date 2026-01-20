@@ -1,12 +1,11 @@
 Features Extraction
 -------------------
 
-In ``MEDimage``, all the subpackages and modules need a specific configuration to be used correctly, so they respectively
+In ``MEDiml``, all the subpackages and modules need a specific configuration to be used correctly, so they respectively
 rely on one single JSON configuration file. This file contains parameters for each step of the workflow (processing, extraction...).
 For example, `IBSI <https://arxiv.org/abs/1612.07003>`__ tests require specific parameters for radiomics extraction for each test.
 You can check a full example of the file here: 
-`notebooks/ibsi/settings/ <https://github.com/MahdiAll99/MEDimage/tree/main/notebooks/ibsi/settings>`__.
-
+`notebooks/ibsi/settings/ <https://github.com/MEDomicsLab/MEDiml/tree/main/notebooks/ibsi/settings>`__.
 This section will walk you through the details on how to set up and use the configuration file. It will be separated to four subdivision:
 
 - :ref:`Pre-checks<Pre-checks Parameters>`
@@ -145,7 +144,7 @@ e.g.
 
     {
         "pre_radiomics_checks" : {
-            "path_data" : "home/user/medimage/data/npy/sts",
+            "path_data" : "home/user/mediml/data/npy/sts",
             }
     }
 
@@ -164,7 +163,7 @@ e.g.
 
     {
         "pre_radiomics_checks" : {
-            "path_save_checks" : "home/user/medimage/checks",
+            "path_save_checks" : "home/user/mediml/checks",
             }
     }
 
@@ -183,7 +182,7 @@ e.g.
 
     {
         "pre_radiomics_checks" : {
-            "path_csv" : "home/user/medimage/data/csv/roiNames_GTV.csv",
+            "path_csv" : "home/user/mediml/data/csv/roiNames_GTV.csv",
             }
     }
 
@@ -335,7 +334,7 @@ e.g.
                         "type": "List"
                     },
                     "outliers": {
-                        "description": "Outlier resegmentation algorithm. For now ``MEDimage`` only implements ``\"Collewet\"`` algorithms.
+                        "description": "Outlier resegmentation algorithm. For now ``MEDiml`` only implements ``\"Collewet\"`` algorithms.
                             Leave empty for no outlier resegmentation",
                         "type": "string"
                     }
@@ -508,7 +507,7 @@ This parameter is only used for PET scans and is set as follows:
     }
 
 .. note::
-   This parameter concern PET scans only. ``MEDimage`` only computes suv map for DICOM scans, since the computation relies on 
+   This parameter concern PET scans only. ``MEDiml`` only computes suv map for DICOM scans, since the computation relies on 
    DICOM headers for computation and assumes it's already computed for NIfTI scans.
 
 .. jsonschema::
@@ -828,7 +827,7 @@ Filtering parameters
 ^^^^^^^^^^^^^^^^^^^^
 
 Filtering parameters are organized  in a separate dictionary, each dictionary contains 
-parameters for every filter of the ``MEDimage``:
+parameters for every filter of the ``MEDiml``:
 
 .. code-block:: JSON
 
