@@ -5,7 +5,7 @@ description = "MEDiml is a Python package for processing and extracting features
 authors = ["MEDomics Consortium <medomics.info@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
-homepage = "https://medimage.app/"
+homepage = "https://mediml.app/"
 repository = "https://github.com/MEDomicsLab/MEDiml/"
 keywords = ["python", "ibsi", "medical-imaging", 
             "cancer-imaging-research", "radiomics", 

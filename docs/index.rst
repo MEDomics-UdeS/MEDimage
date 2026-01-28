@@ -11,7 +11,7 @@ and optimality analysis, streamlining radiomics approaches. It complies with `in
 <https://pubs.rsna.org/doi/epdf/10.1148/radiol.231319>`_ in the context of radiomics.
 
 ``MEDiml`` also uses an interactive, easy-to-install application (see image below) that grants users access to all software modules. Find more details `here \
-<https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics>`_
+<https://medomicslab.gitbook.io/medomicslab-docs/tutorials/radiomics>`_
 
 .. carousel::
    :show_controls:
@@ -19,15 +19,15 @@ and optimality analysis, streamlining radiomics approaches. It complies with `in
 
    .. image:: /figures/InterfaceMEDimage.JPG
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/learning
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/learning
 
    .. image:: /figures/MEDimage-app-be.png
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/feature-extraction
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/radiomics/feature-extraction
 
    .. image:: /figures/MEDimage-app-dm.png
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/data-processing
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/radiomics/data-processing
 
 .. toctree::
    :maxdepth: 2
