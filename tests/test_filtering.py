@@ -3,10 +3,10 @@ import sys
 
 import numpy as np
 
-MODULE_DIR = os.path.dirname(os.path.abspath('./MEDimage/'))
+MODULE_DIR = os.path.dirname(os.path.abspath('./MEDiml/'))
 sys.path.append(MODULE_DIR)
 
-from MEDimage.filters.gabor import apply_gabor
+from MEDiml.filters.gabor import apply_gabor
 
 
 def test_gabor():

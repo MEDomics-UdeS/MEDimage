@@ -341,7 +341,7 @@ class DataManager(object):
                     self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
             else:
                 if self.save:
-                    logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDimage "\
+                    logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
                         "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
 
         nb_job_left = n_scans - n_batch
@@ -382,7 +382,7 @@ class DataManager(object):
                         self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
                 else:
                     if self.save:
-                        logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDimage "\
+                        logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
                             "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
         print('DONE')
 
@@ -618,7 +618,7 @@ class DataManager(object):
                     self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
             else:
                 if self.save:
-                    logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDimage "\
+                    logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
                         "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
         print('DONE')
 

@@ -111,7 +111,7 @@ def discretize(vol_re: np.ndarray,
 
     # DISCRETISATION
     if discr_type in ["FBS", "FBSequal"]:
-        if user_set_min_val is not None:
+        if user_set_min_val:
             min_val = deepcopy(user_set_min_val)
         else:
             min_val = np.nanmin(vol_quant_re)

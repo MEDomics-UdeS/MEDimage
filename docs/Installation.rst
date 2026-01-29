@@ -4,14 +4,13 @@ Installation
 Python installation
 -------------------
 
-The MEDimage package requires python 3.8 or more to be run. If you don't have it installed on your machine, follow \
-the instructions `here <https://github.com/MahdiAll99/MEDimage/blob/main/python.md>`__.
+The MEDiml package requires python 3.8 or more to be run. If you don't have it installed on your machine, follow \
+the instructions `here <https://github.com/MEDomicsLab/MEDiml/blob/main/python.md>`__.
 
 Install via pip
 ---------------
-``MEDimage`` is available on PyPi for installation via ``pip`` which allows you to install the package in one step ::
-
-    pip install medimage-pkg
+``MEDiml`` is available on PyPi for installation via ``pip`` which allows you to install the package in one step ::
+    pip install mediml
 
 Install from source
 -------------------
@@ -28,23 +27,23 @@ following the instructions `here <https://docs.anaconda.com/anaconda/install/ind
 
 * Cloning the repository ::
 
-    git clone https://github.com/MahdiAll99/MEDimage.git
+    git clone https://github.com/MEDomicsLab/MEDiml.git
 
 * Access the package folder ::
 
-    cd MEDimage
+    cd MEDiml
 
-* Using anaconda distribution, we will create and activate the medimage environment. You can do so by simply running ::
+* Using anaconda distribution, we will create and activate the mediml environment. You can do so by simply running ::
 
-    conda env create --name medimage --file environment.yml
+    conda env create --name mediml --file environment.yml
 
 * Active the installed environment ::
 
-    conda activate medimage
+    conda activate mediml
 
 * If you want to run the notebooks, you must add your installed environnement to jupyter notebook kernels :: 
      
-    python -m ipykernel install --user --name=medimage
+    python -m ipykernel install --user --name=mediml
 
 .. |conda-logo| image:: https://www.psych.mcgill.ca/labs/mogillab/anaconda2/pkgs/anaconda-navigator-1.4.3-py27_0/lib/python2.7/site-packages/anaconda_navigator/static/images/anaconda-icon-1024x1024.png
     :width: 3%
@@ -60,11 +59,11 @@ More downloading methods can be found `here <https://python-poetry.org/docs/#ins
 
 * Cloning the repository ::
 
-    git clone https://github.com/MahdiAll99/MEDimage.git
+    git clone https://github.com/MEDomicsLab/MEDiml.git
 
 * Access the package folder ::
 
-    cd MEDimage
+    cd MEDiml
 
 * Poetry will automatically create a new environment and download the required dependencies after running ::
 

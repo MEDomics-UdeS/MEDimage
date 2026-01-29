@@ -1,17 +1,17 @@
-Welcome to the MEDimage documentation!
+Welcome to the MEDiml documentation!
 =======================================
 
 .. image:: /figures/pakcage-overview.png
    :width: 100%
 
 
-``MEDimage`` is a comprehensive tool, for processing and extracting features from medical images. It also supports the training, evaluation, 
+``MEDiml`` is a comprehensive tool, for processing and extracting features from medical images. It also supports the training, evaluation, 
 and optimality analysis, streamlining radiomics approaches. It complies with `international radiomic feature extraction standards \
 <https://pubs.rsna.org/doi/10.1148/radiol.2020191145>`_  and `international standards for convolotuional filters \
 <https://pubs.rsna.org/doi/epdf/10.1148/radiol.231319>`_ in the context of radiomics.
 
-``MEDimage`` also uses an interactive, easy-to-install application (see image below) that grants users access to all software modules. Find more details `here \
-<https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics>`_
+``MEDiml`` also uses an interactive, easy-to-install application (see image below) that grants users access to all software modules. Find more details `here \
+<https://medomicslab.gitbook.io/medomicslab-docs/tutorials/radiomics>`_
 
 .. carousel::
    :show_controls:
@@ -19,15 +19,15 @@ and optimality analysis, streamlining radiomics approaches. It complies with `in
 
    .. image:: /figures/InterfaceMEDimage.JPG
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/learning
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/learning
 
    .. image:: /figures/MEDimage-app-be.png
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/feature-extraction
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/radiomics/feature-extraction
 
    .. image:: /figures/MEDimage-app-dm.png
       :width: 500
-      :target: https://medomics-udes.gitbook.io/medomicslab-docs/tutorials/radiomics/data-processing
+      :target: https://medomicslab.gitbook.io/mediml-app-docs/radiomics/data-processing
 
 .. toctree::
    :maxdepth: 2

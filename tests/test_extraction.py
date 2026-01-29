@@ -3,10 +3,10 @@ import sys
 
 import numpy as np
 
-MODULE_DIR = os.path.dirname(os.path.abspath('./MEDimage/'))
+MODULE_DIR = os.path.dirname(os.path.abspath('./MEDiml/'))
 sys.path.append(MODULE_DIR)
 
-import MEDimage
+import MEDiml
 
 
 class TestExtraction:
@@ -82,20 +82,20 @@ class TestExtraction:
     def test_morph_features(self):
         phantom = self.__get_phantom()
         roi = self.__get_random_roi()
-        morph = MEDimage.biomarkers.morph.extract_all(
+        morph = MEDiml.biomarkers.morph.extract_all(
             vol=phantom, 
             mask_int=roi, 
             mask_morph=roi,
             res=[2, 2, 2],
             intensity_type="arbitrary"
         )
-        morph_vol = MEDimage.biomarkers.morph.vol(
+        morph_vol = MEDiml.biomarkers.morph.vol(
             vol=phantom, 
             mask_int=roi, 
             mask_morph=roi,
             res=[2, 2, 2]
         )
-        surface_area = MEDimage.biomarkers.morph.area(
+        surface_area = MEDiml.biomarkers.morph.area(
             vol=phantom, 
             mask_int=roi, 
             mask_morph=roi,
@@ -109,18 +109,18 @@ class TestExtraction:
     def test_stats_features(self):
         phantom = self.__get_phantom()
         roi = self.__get_random_roi()
-        vol_int_re = MEDimage.processing.roi_extract(
+        vol_int_re = MEDiml.processing.roi_extract(
             vol=phantom, 
             roi=roi
         )
-        stats = MEDimage.biomarkers.stats.extract_all(
+        stats = MEDiml.biomarkers.stats.extract_all(
             vol=vol_int_re,
             intensity_type="definite"
         )
-        kurt = MEDimage.biomarkers.stats.kurt(
+        kurt = MEDiml.biomarkers.stats.kurt(
             vol=vol_int_re,
         )
-        skewness = MEDimage.biomarkers.stats.skewness(
+        skewness = MEDiml.biomarkers.stats.skewness(
             vol=vol_int_re,
         )
         assert kurt == stats["Fstat_kurt"]

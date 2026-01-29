@@ -8,7 +8,7 @@ import wget
 
 def main(full_sts: bool, subset: bool) -> None:
     """
-    Downloads MEDimage data for testing, tutorials and demo and organizes it in the right folders.
+    Downloads MEDiml data for testing, tutorials and demo and organizes it in the right folders.
 
     Args:
         full_sts (bool): if ``True`` will not download the STS data (large size).
@@ -24,17 +24,17 @@ def main(full_sts: bool, subset: bool) -> None:
         "https://sandbox.zenodo.org/records/45640/files/MEDimage-Dataset-No-STS.zip?download=1",
         out=os.getcwd())
     except Exception as e:
-        print("MEDimage-Dataset-No-STS.zip download failed, error:", e)
+        print("MEDiml-Dataset-No-STS.zip download failed, error:", e)
     
     # unzip data
     print("\n================ Extracting first part of data  ================")
     try:
-        with zipfile.ZipFile(os.getcwd() + "/MEDimage-Dataset-No-STS.zip", 'r') as zip_ref:
+        with zipfile.ZipFile(os.getcwd() + "/MEDiml-Dataset-No-STS.zip", 'r') as zip_ref:
             zip_ref.extractall(os.getcwd())
         # delete zip file after extraction
-        os.remove(os.getcwd() + "/MEDimage-Dataset-No-STS.zip")
+        os.remove(os.getcwd() + "/MEDiml-Dataset-No-STS.zip")
     except Exception as e:
-        print("MEDimage-Dataset-No-STS.zip extraction failed, error:", e)
+        print("MEDiml-Dataset-No-STS.zip extraction failed, error:", e)
     
     # Organize data in the right folders
     # ibsi tests data organization
@@ -90,17 +90,17 @@ def main(full_sts: bool, subset: bool) -> None:
             out=os.getcwd())
             pass
         except Exception as e:
-            print("MEDimage-STS-Dataset.zip download failed, error:", e)
+            print("MEDiml-STS-Dataset.zip download failed, error:", e)
         
         # unzip data
         print("\n================ Extracting second part of data  ================")
         try:
-            with zipfile.ZipFile(os.getcwd() + "/MEDimage-STS-Dataset.zip", 'r') as zip_ref:
+            with zipfile.ZipFile(os.getcwd() + "/MEDiml-STS-Dataset.zip", 'r') as zip_ref:
                 zip_ref.extractall(os.getcwd())
                 # remove zip file after extraction
-            os.remove(os.getcwd() + "/MEDimage-STS-Dataset.zip")
+            os.remove(os.getcwd() + "/MEDiml-STS-Dataset.zip")
         except Exception as e:
-            print("MEDimage-STS-Dataset.zip extraction failed, error:", e)
+            print("MEDiml-STS-Dataset.zip extraction failed, error:", e)
         
         # organize data in the right folder
         print("\n================== Organizing data in folders  ==================")
@@ -118,31 +118,31 @@ def main(full_sts: bool, subset: bool) -> None:
             out=os.getcwd())
             pass
         except Exception as e:
-            print("MEDimage-STS-Dataset-Subset.zip download failed, error:", e)
+            print("MEDiml-STS-Dataset-Subset.zip download failed, error:", e)
         
         # unzip data
         print("\n================ Extracting second part of data  ================")
         try:
-            with zipfile.ZipFile(os.getcwd() + "/MEDimage-STS-Dataset-Subset.zip", 'r') as zip_ref:
+            with zipfile.ZipFile(os.getcwd() + "/MEDiml-STS-Dataset-Subset.zip", 'r') as zip_ref:
                 zip_ref.extractall(os.getcwd())
                 # remove zip file after extraction
-            os.remove(os.getcwd() + "/MEDimage-STS-Dataset-Subset.zip")
+            os.remove(os.getcwd() + "/MEDiml-STS-Dataset-Subset.zip")
         except Exception as e:
-            print("MEDimage-STS-Dataset-Subset.zip extraction failed, error:", e)
+            print("MEDiml-STS-Dataset-Subset.zip extraction failed, error:", e)
         
         # organize data in the right folder
         print("\n================== Organizing data in folders  ==================")
         try:
-            shutil.move(os.getcwd() + "/MEDimage-STS-Dataset-Subset", 
+            shutil.move(os.getcwd() + "/MEDiml-STS-Dataset-Subset", 
                     os.getcwd() + "/notebooks" + "/tutorial" + "/data" + "/DICOM-STS")
         except Exception as e:
-            print("Failed to move MEDimage-STS-Dataset-Subset folder, error:", e)
+            print("Failed to move MEDiml-STS-Dataset-Subset folder, error:", e)
 
 
 if __name__ == "__main__":
     # setting up arguments:
     parser = argparse.ArgumentParser(description='Download dataset "\
-        "for MEDimage package tests, tutorials and other demos.')
+        "for MEDiml package tests, tutorials and other demos.')
     parser.add_argument("--full-sts", default=False, action='store_true',
                     help="If specified, will download the full STS data used in tutorials. Defaults to False.")
     parser.add_argument("--subset", default=True, action='store_true',

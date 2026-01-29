@@ -4,7 +4,7 @@ Wrangling
 DataManager 
 -------------------------------------
 
-.. automodule:: MEDimage.wrangling.DataManager
+.. automodule:: MEDiml.wrangling.DataManager
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ DataManager
 ProcessDICOM 
 -----------------------------------------
 
-.. automodule:: MEDimage.wrangling.ProcessDICOM
+.. automodule:: MEDiml.wrangling.ProcessDICOM
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,7 +1,7 @@
 CSV File
 ========
 
-In ``MEDimage`` every dataset must have a csv file along with it, this file contains information 
+In ``MEDiml`` every dataset must have a csv file along with it, this file contains information 
 about the scans in the dataset that will be used in the radiomics analysis, especially region of interest (ROI) names used in
 each scan. Since scans can have multiple regions of interest (ROIs), the user needs to specify for each scan the ROI name(s) to use
 for the processing and radiomics extraction. The csv files are also used by the ``DataManager`` in pre-checks and
@@ -114,4 +114,4 @@ different ROIs (GTV mass and GTV edema) and each table is for different radiomci
 
 .. note::
     It is pointless in our case but it's possible to analyze the addition of multiple ROIs, for example: ``"{GTV_Edema}+{GTV_Mass}"``.
-    Future works of ``MEDimage`` will aim to automate the creation of these csv files for each dataset and to implement ROIs intersection as well.
+    Future works of ``MEDiml`` will aim to automate the creation of these csv files for each dataset and to implement ROIs intersection as well.
