@@ -15,7 +15,7 @@ import pandas as pd
 import ray
 from tqdm import trange
 
-import MEDimage
+import MEDiml
 
 
 class BatchExtractor(object):
@@ -47,7 +47,7 @@ class BatchExtractor(object):
     def __load_and_process_params(self) -> Dict:
         """Load and process the computing & batch parameters from JSON file"""
         # Load json parameters
-        im_params = MEDimage.utils.json_utils.load_json(self._path_params)
+        im_params = MEDiml.utils.json_utils.load_json(self._path_params)
         
         # Update class attributes
         self.roi_types.extend(im_params['roi_types'])
@@ -70,7 +70,7 @@ class BatchExtractor(object):
         Computes all radiomics features (Texture & Non-texture) for one patient/scan
 
         Args:
-            name_patient(str): scan or patient full name. It has to respect the MEDimage naming convention:
+            name_patient(str): scan or patient full name. It has to respect the MEDiml naming convention:
                 PatientID__ImagingScanName.ImagingModality.npy
             roi_name(str): name of the ROI that will  be used in computation.
             im_params(Dict): Dict of parameters/settings that will be used in the processing and computation.
@@ -102,7 +102,7 @@ class BatchExtractor(object):
         # Load MEDscan instance
         try:
             with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
-            medscan = MEDimage.MEDscan(medscan)
+            medscan = MEDiml.MEDscan(medscan)
         except Exception as e:
             print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
             return None
@@ -114,7 +114,7 @@ class BatchExtractor(object):
         # Get ROI (region of interest)
         logging.info("\n--> Extraction of ROI mask:")
         try:
-            vol_obj_init, roi_obj_init = MEDimage.processing.get_roi_from_indexes(
+            vol_obj_init, roi_obj_init = MEDiml.processing.get_roi_from_indexes(
                 medscan,
                 name_roi=roi_name,
                 box_string=medscan.params.process.box_string
@@ -130,7 +130,7 @@ class BatchExtractor(object):
 
         # Interpolation
         # Intensity Mask
-        vol_obj = MEDimage.processing.interp_volume(
+        vol_obj = MEDiml.processing.interp_volume(
             medscan=medscan,
             vol_obj_s=vol_obj_init,
             vox_dim=medscan.params.process.scale_non_text,
@@ -141,7 +141,7 @@ class BatchExtractor(object):
             box_string=medscan.params.process.box_string
         )
         # Morphological Mask
-        roi_obj_morph = MEDimage.processing.interp_volume(
+        roi_obj_morph = MEDiml.processing.interp_volume(
             medscan=medscan,
             vol_obj_s=roi_obj_init,
             vox_dim=medscan.params.process.scale_non_text,
@@ -155,14 +155,14 @@ class BatchExtractor(object):
         # Re-segmentation
         # Intensity mask range re-segmentation
         roi_obj_int = deepcopy(roi_obj_morph)
-        roi_obj_int.data = MEDimage.processing.range_re_seg(
+        roi_obj_int.data = MEDiml.processing.range_re_seg(
             vol=vol_obj.data, 
             roi=roi_obj_int.data,
             im_range=medscan.params.process.im_range
         )
         # Intensity mask outlier re-segmentation
         roi_obj_int.data = np.logical_and(
-            MEDimage.processing.outlier_re_seg(
+            MEDiml.processing.outlier_re_seg(
                 vol=vol_obj.data, 
                 roi=roi_obj_int.data, 
                 outliers=medscan.params.process.outliers
@@ -182,14 +182,14 @@ class BatchExtractor(object):
             if medscan.params.filter.filter_type.lower() == 'textural':
                 raise ValueError('For textural filtering, please use the BatchExtractorTexturalFilters class.')
             try:
-                vol_obj = MEDimage.filters.apply_filter(medscan, vol_obj)
+                vol_obj = MEDiml.filters.apply_filter(medscan, vol_obj)
             except Exception as e:
                 logging.error(f'PROBLEM WITH LINEAR FILTERING: {e}')
                 return log_file
 
         # ROI Extraction :
         try:
-            vol_int_re = MEDimage.processing.roi_extract(
+            vol_int_re = MEDiml.processing.roi_extract(
                 vol=vol_obj.data, 
                 roi=roi_obj_int.data
             )
@@ -208,7 +208,7 @@ class BatchExtractor(object):
         # Morphological features extraction
         try:
             if medscan.params.radiomics.extract['Morph']:
-                morph = MEDimage.biomarkers.morph.extract_all(
+                morph = MEDiml.biomarkers.morph.extract_all(
                     vol=vol_obj.data, 
                     mask_int=roi_obj_int.data, 
                     mask_morph=roi_obj_morph.data,
@@ -224,7 +224,7 @@ class BatchExtractor(object):
         # Local intensity features extraction
         try:
             if medscan.params.radiomics.extract['LocalIntensity']:
-                local_intensity = MEDimage.biomarkers.local_intensity.extract_all(
+                local_intensity = MEDiml.biomarkers.local_intensity.extract_all(
                     img_obj=vol_obj.data,
                     roi_obj=roi_obj_int.data,
                     res=medscan.params.process.scale_non_text,
@@ -239,7 +239,7 @@ class BatchExtractor(object):
         # statistical features extraction
         try:
             if medscan.params.radiomics.extract['Stats']:
-                stats = MEDimage.biomarkers.stats.extract_all(
+                stats = MEDiml.biomarkers.stats.extract_all(
                     vol=vol_int_re,
                     intensity_type=medscan.params.process.intensity_type
                 )
@@ -250,7 +250,7 @@ class BatchExtractor(object):
             stats = None
 
         # Intensity histogram equalization of the imaging volume
-        vol_quant_re, _ = MEDimage.processing.discretize(
+        vol_quant_re, _ = MEDiml.processing.discretize(
             vol_re=vol_int_re,
             discr_type=medscan.params.process.ih['type'], 
             n_q=medscan.params.process.ih['val'], 
@@ -260,7 +260,7 @@ class BatchExtractor(object):
         # Intensity histogram features extraction
         try:
             if medscan.params.radiomics.extract['IntensityHistogram']:
-                int_hist = MEDimage.biomarkers.intensity_histogram.extract_all(
+                int_hist = MEDiml.biomarkers.intensity_histogram.extract_all(
                     vol=vol_quant_re
                 )
             else:
@@ -272,7 +272,7 @@ class BatchExtractor(object):
         # Intensity histogram equalization of the imaging volume
         if medscan.params.process.ivh and 'type' in medscan.params.process.ivh and 'val' in medscan.params.process.ivh:
             if medscan.params.process.ivh['type'] and medscan.params.process.ivh['val']:
-                vol_quant_re, wd = MEDimage.processing.discretize(
+                vol_quant_re, wd = MEDiml.processing.discretize(
                         vol_re=vol_int_re,
                         discr_type=medscan.params.process.ivh['type'], 
                         n_q=medscan.params.process.ivh['val'], 
@@ -285,7 +285,7 @@ class BatchExtractor(object):
 
         # Intensity volume histogram features extraction
         if medscan.params.radiomics.extract['IntensityVolumeHistogram']:
-            int_vol_hist = MEDimage.biomarkers.int_vol_hist.extract_all(
+            int_vol_hist = MEDiml.biomarkers.int_vol_hist.extract_all(
                         medscan=medscan,
                         vol=vol_quant_re,
                         vol_int_re=vol_int_re, 
@@ -310,7 +310,7 @@ class BatchExtractor(object):
 
             # Interpolation
             # Intensity Mask
-            vol_obj = MEDimage.processing.interp_volume(
+            vol_obj = MEDiml.processing.interp_volume(
                 medscan=medscan,
                 vol_obj_s=vol_obj_init,
                 vox_dim=medscan.params.process.scale_text[s],
@@ -321,7 +321,7 @@ class BatchExtractor(object):
                 box_string=medscan.params.process.box_string
             )
             # Morphological Mask
-            roi_obj_morph = MEDimage.processing.interp_volume(
+            roi_obj_morph = MEDiml.processing.interp_volume(
                 medscan=medscan,
                 vol_obj_s=roi_obj_init,
                 vox_dim=medscan.params.process.scale_text[s],
@@ -335,14 +335,14 @@ class BatchExtractor(object):
             # Re-segmentation
             # Intensity mask range re-segmentation
             roi_obj_int = deepcopy(roi_obj_morph)
-            roi_obj_int.data = MEDimage.processing.range_re_seg(
+            roi_obj_int.data = MEDiml.processing.range_re_seg(
                 vol=vol_obj.data, 
                 roi=roi_obj_int.data,
                 im_range=medscan.params.process.im_range
             )
             # Intensity mask outlier re-segmentation
             roi_obj_int.data = np.logical_and(
-                MEDimage.processing.outlier_re_seg(
+                MEDiml.processing.outlier_re_seg(
                     vol=vol_obj.data, 
                     roi=roi_obj_int.data, 
                     outliers=medscan.params.process.outliers
@@ -355,7 +355,7 @@ class BatchExtractor(object):
                 if medscan.params.filter.filter_type.lower() == 'textural':
                     raise ValueError('For textural filtering, please use the BatchExtractorTexturalFilters class.')
                 try:
-                    vol_obj = MEDimage.filters.apply_filter(medscan, vol_obj)
+                    vol_obj = MEDiml.filters.apply_filter(medscan, vol_obj)
                 except Exception as e:
                     logging.error(f'PROBLEM WITH LINEAR FILTERING: {e}')
                     return log_file
@@ -379,13 +379,13 @@ class BatchExtractor(object):
                 medscan.init_tf_calculation(algo=a, gl=n, scale=s)
 
                 # ROI Extraction :
-                vol_int_re = MEDimage.processing.roi_extract(
+                vol_int_re = MEDiml.processing.roi_extract(
                     vol=vol_obj.data, 
                     roi=roi_obj_int.data)
 
                 # Discretisation :
                 try:
-                    vol_quant_re, _ = MEDimage.processing.discretize(
+                    vol_quant_re, _ = MEDiml.processing.discretize(
                         vol_re=vol_int_re,
                         discr_type=medscan.params.process.algo[a], 
                         n_q=medscan.params.process.gray_levels[a][n], 
@@ -398,7 +398,7 @@ class BatchExtractor(object):
                 # GLCM features extraction
                 try:
                     if medscan.params.radiomics.extract['GLCM']:
-                        glcm = MEDimage.biomarkers.glcm.extract_all(
+                        glcm = MEDiml.biomarkers.glcm.extract_all(
                             vol=vol_quant_re, 
                             dist_correction=medscan.params.radiomics.glcm.dist_correction)
                     else:
@@ -410,7 +410,7 @@ class BatchExtractor(object):
                 # GLRLM features extraction
                 try:
                     if medscan.params.radiomics.extract['GLRLM']:
-                        glrlm = MEDimage.biomarkers.glrlm.extract_all(
+                        glrlm = MEDiml.biomarkers.glrlm.extract_all(
                             vol=vol_quant_re,
                             dist_correction=medscan.params.radiomics.glrlm.dist_correction)
                     else:
@@ -422,7 +422,7 @@ class BatchExtractor(object):
                 # GLSZM features extraction
                 try:
                     if medscan.params.radiomics.extract['GLSZM']:
-                        glszm = MEDimage.biomarkers.glszm.extract_all(
+                        glszm = MEDiml.biomarkers.glszm.extract_all(
                             vol=vol_quant_re)
                     else:
                         glszm = None
@@ -433,7 +433,7 @@ class BatchExtractor(object):
                 # GLDZM features extraction
                 try:
                     if medscan.params.radiomics.extract['GLDZM']:
-                        gldzm = MEDimage.biomarkers.gldzm.extract_all(
+                        gldzm = MEDiml.biomarkers.gldzm.extract_all(
                             vol_int=vol_quant_re, 
                             mask_morph=roi_obj_morph.data)
                     else:
@@ -445,7 +445,7 @@ class BatchExtractor(object):
                 # NGTDM features extraction
                 try:
                     if medscan.params.radiomics.extract['NGTDM']:
-                        ngtdm = MEDimage.biomarkers.ngtdm.extract_all(
+                        ngtdm = MEDiml.biomarkers.ngtdm.extract_all(
                             vol=vol_quant_re, 
                             dist_correction=medscan.params.radiomics.ngtdm.dist_correction)
                     else:
@@ -457,7 +457,7 @@ class BatchExtractor(object):
                 # NGLDM features extraction
                 try:
                     if medscan.params.radiomics.extract['NGLDM']:
-                        ngldm = MEDimage.biomarkers.ngldm.extract_all(
+                        ngldm = MEDiml.biomarkers.ngldm.extract_all(
                             vol=vol_quant_re)
                     else:
                         ngldm = None
@@ -556,8 +556,8 @@ class BatchExtractor(object):
             wildcard = '*_' + scan + '(' + roi_type + ')*.json'
 
             # Create radiomics table
-            radiomics_table_dict = MEDimage.utils.create_radiomics_table(
-                MEDimage.utils.get_file_paths(self._path_save / f'features({roi_label})', wildcard),
+            radiomics_table_dict = MEDiml.utils.create_radiomics_table(
+                MEDiml.utils.get_file_paths(self._path_save / f'features({roi_label})', wildcard),
                 im_space, 
                 log_file
             )
@@ -568,7 +568,7 @@ class BatchExtractor(object):
             np.save(save_path, [radiomics_table_dict])
 
             # Create CSV table and Definitions
-            MEDimage.utils.write_radiomics_csv(save_path)
+            MEDiml.utils.write_radiomics_csv(save_path)
 
             logging.info(f"DONE\n {time() - start}\n")
 
@@ -687,13 +687,13 @@ class BatchExtractor(object):
         for r in range(0, n_roi_types):
             label = self.roi_type_labels[r]
             wildcard = '*' + label + '*.json'
-            file_paths = MEDimage.utils.get_file_paths(self._path_save / f'features({self.roi_types[r]})', wildcard)
+            file_paths = MEDiml.utils.get_file_paths(self._path_save / f'features({self.roi_types[r]})', wildcard)
             n_files = len(file_paths)
             scans = [0] * n_files
             modalities = [0] * n_files
             for f in range(0, n_files):
                 rad_file_name = file_paths[f].stem
-                scans[f] = MEDimage.utils.get_scan_name_from_rad_name(rad_file_name)
+                scans[f] = MEDiml.utils.get_scan_name_from_rad_name(rad_file_name)
                 modalities[f] = rad_file_name.split('.')[1]
             scans = s = (np.unique(np.array(scans))).tolist()
             n_scans = len(scans)
@@ -702,12 +702,12 @@ class BatchExtractor(object):
                 scan = scans[s]
                 modality = modalities[s]
                 wildcard = '*' + scan + '(' + label + ')*.json'
-                file_paths = MEDimage.utils.get_file_paths(self._path_save / f'features({self.roi_types[r]})', wildcard)
+                file_paths = MEDiml.utils.get_file_paths(self._path_save / f'features({self.roi_types[r]})', wildcard)
                 n_files = len(file_paths)
 
                 # Finding the images spaces for a test file (assuming that all
                 # files for a given scan and roi_type_label have the same image spaces
-                radiomics = MEDimage.utils.json_utils.load_json(file_paths[0])
+                radiomics = MEDiml.utils.json_utils.load_json(file_paths[0])
                 im_spaces = [key for key in radiomics.keys()]
                 im_spaces = im_spaces[:-1]
                 n_im_spaces = len(im_spaces)

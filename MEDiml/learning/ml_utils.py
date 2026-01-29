@@ -16,9 +16,9 @@ import seaborn as sns
 from numpyencoder import NumpyEncoder
 from sklearn.model_selection import StratifiedKFold
 
-from MEDimage.utils import get_institutions_from_ids
-from MEDimage.utils.get_full_rad_names import get_full_rad_names
-from MEDimage.utils.json_utils import load_json, save_json
+from MEDiml.utils import get_institutions_from_ids
+from MEDiml.utils.get_full_rad_names import get_full_rad_names
+from MEDiml.utils.json_utils import load_json, save_json
 
 
 # Define useful constants

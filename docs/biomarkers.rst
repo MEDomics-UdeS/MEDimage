@@ -4,7 +4,7 @@ Biomarkers
 BatchExtractor 
 -----------------------------------------
 
-.. automodule:: MEDimage.biomarkers.BatchExtractor
+.. automodule:: MEDiml.biomarkers.BatchExtractor
    :members:
    :undoc-members:
    :show-inheritance:
@@ -12,7 +12,7 @@ BatchExtractor
 diagnostics 
 -----------------------------------------
 
-.. automodule:: MEDimage.biomarkers.diagnostics
+.. automodule:: MEDiml.biomarkers.diagnostics
    :members:
    :undoc-members:
    :show-inheritance:
@@ -20,7 +20,7 @@ diagnostics
 get\_oriented\_bound\_box 
 ----------------------------------------------------
 
-.. automodule:: MEDimage.biomarkers.get_oriented_bound_box
+.. automodule:: MEDiml.biomarkers.get_oriented_bound_box
    :members:
    :undoc-members:
    :show-inheritance:
@@ -28,7 +28,7 @@ get\_oriented\_bound\_box
 glcm 
 -------------------------------
 
-.. automodule:: MEDimage.biomarkers.glcm
+.. automodule:: MEDiml.biomarkers.glcm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -36,7 +36,7 @@ glcm
 gldzm 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.gldzm
+.. automodule:: MEDiml.biomarkers.gldzm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -44,7 +44,7 @@ gldzm
 glrlm 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.glrlm
+.. automodule:: MEDiml.biomarkers.glrlm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -52,7 +52,7 @@ glrlm
 glszm 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.glszm
+.. automodule:: MEDiml.biomarkers.glszm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -60,7 +60,7 @@ glszm
 int\_vol\_hist 
 -----------------------------------------
 
-.. automodule:: MEDimage.biomarkers.int_vol_hist
+.. automodule:: MEDiml.biomarkers.int_vol_hist
    :members:
    :undoc-members:
    :show-inheritance:
@@ -68,7 +68,7 @@ int\_vol\_hist
 intensity\_histogram 
 -----------------------------------------------
 
-.. automodule:: MEDimage.biomarkers.intensity_histogram
+.. automodule:: MEDiml.biomarkers.intensity_histogram
    :members:
    :undoc-members:
    :show-inheritance:
@@ -76,7 +76,7 @@ intensity\_histogram
 local\_intensity 
 -------------------------------------------
 
-.. automodule:: MEDimage.biomarkers.local_intensity
+.. automodule:: MEDiml.biomarkers.local_intensity
    :members:
    :undoc-members:
    :show-inheritance:
@@ -84,7 +84,7 @@ local\_intensity
 morph 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.morph
+.. automodule:: MEDiml.biomarkers.morph
    :members:
    :undoc-members:
    :show-inheritance:
@@ -92,7 +92,7 @@ morph
 ngldm 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.ngldm
+.. automodule:: MEDiml.biomarkers.ngldm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -100,7 +100,7 @@ ngldm
 ngtdm 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.ngtdm
+.. automodule:: MEDiml.biomarkers.ngtdm
    :members:
    :undoc-members:
    :show-inheritance:
@@ -108,7 +108,7 @@ ngtdm
 stats 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.stats
+.. automodule:: MEDiml.biomarkers.stats
    :members:
    :undoc-members:
    :show-inheritance:
@@ -116,7 +116,7 @@ stats
 utils 
 --------------------------------
 
-.. automodule:: MEDimage.biomarkers.utils
+.. automodule:: MEDiml.biomarkers.utils
    :members:
    :undoc-members:
    :show-inheritance:

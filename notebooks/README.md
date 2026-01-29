@@ -1,4 +1,4 @@
-# MEDimage demo, ibsi tests and tutorials
+# MEDiml demo, ibsi tests and tutorials
 
 We have made many notebooks available in this folder to clear the way for the use of the package. In order to run these notebooks you must have the right datasets for each notebook. To easily do so, run the following command from the parent folder:
 
@@ -18,4 +18,4 @@ The *demo* folder contains one notebook that demonstrates in a brief way the dif
 
 ## tutorials folder
 
-The *tutorials* folder contains notebooks explaining the use of ``DataManager``,  ``MEDimage`` and ``BatchExtractor`` classes, these three classes highly participate in the functioning of the package so we recommend taking the time to follow the tutorials.
+The *tutorials* folder contains notebooks explaining the use of ``DataManager``,  ``MEDiml`` and ``BatchExtractor`` classes, these three classes highly participate in the functioning of the package so we recommend taking the time to follow the tutorials.

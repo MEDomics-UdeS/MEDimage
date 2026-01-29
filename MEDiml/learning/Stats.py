@@ -10,7 +10,7 @@ import pandas as pd
 import scipy
 from sklearn import metrics
 
-from MEDimage.utils.json_utils import load_json
+from MEDiml.utils.json_utils import load_json
 
 
 class Stats:

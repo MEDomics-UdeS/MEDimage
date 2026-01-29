@@ -1,4 +1,4 @@
-name: medimage
+name: mediml
 
 channels:
   - conda-forge

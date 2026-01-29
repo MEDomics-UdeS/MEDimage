@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 from numpyencoder import NumpyEncoder
 
-from MEDimage.learning.ml_utils import (combine_rad_tables, finalize_rad_table,
+from MEDiml.learning.ml_utils import (combine_rad_tables, finalize_rad_table,
                                         get_stratified_splits,
                                         intersect_var_tables)
-from MEDimage.utils.get_full_rad_names import get_full_rad_names
-from MEDimage.utils.json_utils import save_json
+from MEDiml.utils.get_full_rad_names import get_full_rad_names
+from MEDiml.utils.json_utils import save_json
 
 
 class FSR:

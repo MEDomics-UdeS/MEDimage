@@ -17,10 +17,10 @@ from networkx.drawing.nx_pydot import graphviz_layout
 from numpyencoder import NumpyEncoder
 from sklearn import metrics
 
-from MEDimage.learning.ml_utils import feature_imporance_analysis, list_metrics
-from MEDimage.learning.Stats import Stats
-from MEDimage.utils.json_utils import load_json, save_json
-from MEDimage.utils.texture_features_names import *
+from MEDiml.learning.ml_utils import feature_imporance_analysis, list_metrics
+from MEDiml.learning.Stats import Stats
+from MEDiml.utils.json_utils import load_json, save_json
+from MEDiml.utils.texture_features_names import *
 
 
 class Results:

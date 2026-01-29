@@ -1,4 +1,4 @@
-MEDimage
+MEDiml
 ========
 
 .. toctree::

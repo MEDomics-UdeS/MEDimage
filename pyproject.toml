@@ -1,17 +1,17 @@
 [tool.poetry]
-name = "medimage-pkg"
+name = "mediml"
 version = "0.9.8"
-description = "MEDimage is a Python package for processing and extracting features from medical images"
+description = "MEDiml is a Python package for processing and extracting features from medical images"
 authors = ["MEDomics Consortium <medomics.info@gmail.com>"]
 license = "GPL-3.0"
 readme = "README.md"
-homepage = "https://medimage.app/"
-repository = "https://github.com/MEDomics-UdeS/MEDimage/"
+homepage = "https://mediml.app/"
+repository = "https://github.com/MEDomicsLab/MEDiml/"
 keywords = ["python", "ibsi", "medical-imaging", 
             "cancer-imaging-research", "radiomics", 
             "medical-image-analysis", "features-extraction", 
             "radiomics-extraction", "radiomics-features", "radiomics-analysis"]
-packages = [ {include = "MEDimage"} ]
+packages = [ {include = "MEDiml"} ]
 
 [tool.poetry.dependencies]
 python = ">=3.8.0,<=3.10"

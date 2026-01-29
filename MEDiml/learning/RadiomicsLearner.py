@@ -13,16 +13,16 @@ from sklearn import metrics
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from xgboost import XGBClassifier
 
-from MEDimage.learning.DataCleaner import DataCleaner
-from MEDimage.learning.DesignExperiment import DesignExperiment
-from MEDimage.learning.FSR import FSR
-from MEDimage.learning.ml_utils import (average_results, combine_rad_tables,
+from MEDiml.learning.DataCleaner import DataCleaner
+from MEDiml.learning.DesignExperiment import DesignExperiment
+from MEDiml.learning.FSR import FSR
+from MEDiml.learning.ml_utils import (average_results, combine_rad_tables,
                                         feature_imporance_analysis,
                                         finalize_rad_table, get_ml_test_table,
                                         get_radiomics_table, intersect,
                                         intersect_var_tables, save_model)
-from MEDimage.learning.Normalization import Normalization
-from MEDimage.learning.Results import Results
+from MEDiml.learning.Normalization import Normalization
+from MEDiml.learning.Results import Results
 
 from ..utils.json_utils import load_json, save_json
 

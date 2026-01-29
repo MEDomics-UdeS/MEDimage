@@ -27,9 +27,9 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'MEDimage'
-copyright = '2022, MEDimage'
-author = 'MEDimage'
+project = 'MEDiml'
+copyright = '2022, MEDiml'
+author = 'MEDiml developers'
 
 
 # -- General configuration ---------------------------------------------------
@@ -99,7 +99,7 @@ html_theme_options = {
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "figures/MEDimageLogo.png"
+html_logo = "figures/MEDimlLogo.png"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
