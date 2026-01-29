@@ -1,5 +1,9 @@
 version: 2
 
+sphinx:
+  # Path to Sphinx configuration file.
+  configuration: docs/conf.py
+
 # Set the version of Python
 build:
   os: ubuntu-20.04
