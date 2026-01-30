@@ -441,7 +441,7 @@ class DataManager(object):
             else:
                 path_roi_data = self.paths._path_to_niftis
 
-        for file in path_roi_data.glob('*.nii.gz'):
+        for file in self.__nifti.stack_path_roi:
             _id = image_file.name.split("(")[0] # id is PatientID__ImagingScanName
             # Load the patient's ROI nifti files:
             if file.name.startswith(_id) and 'ROI' in file.name.split("."):
