@@ -7,11 +7,15 @@ license = "GPL-3.0"
 readme = "README.md"
 homepage = "https://mediml.app/"
 repository = "https://github.com/MEDomicsLab/MEDiml/"
+documentation = "https://mediml.readthedocs.io/"
 keywords = ["python", "ibsi", "medical-imaging", 
             "cancer-imaging-research", "radiomics", 
             "medical-image-analysis", "features-extraction", 
             "radiomics-extraction", "radiomics-features", "radiomics-analysis"]
 packages = [ {include = "MEDiml"} ]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/MEDomicsLab/MEDiml/issues"
 
 [tool.poetry.dependencies]
 python = ">=3.8.0,<=3.10"

@@ -5,7 +5,7 @@
 [![PyPI - Python Version](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)](https://www.python.org/downloads/release/python-380/)
 [![PyPI - version](https://img.shields.io/badge/pypi-v0.9.8-blue)](https://pypi.org/project/medimage-pkg/)
 [![Continuous Integration](https://github.com/MEDomicsLab/MEDiml/actions/workflows/python-app.yml/badge.svg)](https://github.com/MEDomicsLab/MEDiml/actions/workflows/python-app.yml)
-[![Documentation Status](https://readthedocs.org/projects/medimage/badge/?version=latest)](https://medimage.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/medimage/badge/?version=latest)](https://mediml.readthedocs.io/en/latest/?badge=latest)
 [![License: GPL-3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/MahdiAll99/MEDimage/blob/main/notebooks/tutorial/DataManager-Tutorial.ipynb)
 
@@ -41,10 +41,10 @@ You can easily install the ``MEDiml`` package from PyPI using:
 pip install MEDiml
 ```
 
-For more installation options (Conda, Poetry...) check out the [installation documentation](https://medimage.readthedocs.io/en/latest/Installation.html).
+For more installation options (Conda, Poetry...) check out the [installation documentation](https://mediml.readthedocs.io/en/latest/Installation.html).
 
 ## 3. Generating the documentation locally
-The [documentation](https://medimage.readthedocs.io/en/latest/) of the MEDiml package was created using Sphinx. However, you can generate and host it locally by compiling the documentation source code using :
+The [documentation](https://mediml.readthedocs.io/en/latest/) of the MEDiml package was created using Sphinx. However, you can generate and host it locally by compiling the documentation source code using :
 
 ```
 cd docs
@@ -99,7 +99,7 @@ med_obj.save_radiomics(
 
 ## 5. Tutorials
 
-We have created many [tutorial notebooks](https://github.com/MEDomicsLab/MEDiml/tree/main/notebooks) to assist you in learning how to use the different parts of the package. More details can be found in the [documentation](https://medimage.readthedocs.io/en/latest/tutorials.html).
+We have created many [tutorial notebooks](https://github.com/MEDomicsLab/MEDiml/tree/main/notebooks) to assist you in learning how to use the different parts of the package. More details can be found in the [documentation](https://mediml.readthedocs.io/en/latest/tutorials.html).
 
 ## 6. IBSI Standardization
 The image biomarker standardization initiative ([IBSI](https://theibsi.github.io)) is an independent international collaboration that aims to standardize the extraction of image biomarkers from acquired imaging. The IBSI therefore seeks to provide image biomarker nomenclature and definitions, benchmark datasets, and benchmark values to verify image processing and image biomarker calculations, as well as reporting guidelines, for high-throughput image analysis. We participate in this collaboration with our package to make sure it respects international nomenclatures and definitions. The participation was separated into two chapters:

@@ -22,7 +22,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/MEDomicsLab/MEDiml",
     project_urls={
-        'Documentation': 'https://medimage.readthedocs.io/en/latest/index.html',
+        'Documentation': 'https://mediml.readthedocs.io/en/latest/index.html',
         'Github': 'https://github.com/MEDomicsLab/MEDiml'
     },
     classifiers=[
