@@ -432,17 +432,7 @@ class DataManager(object):
         Returns:
             MEDscan: Returns a MEDscan instance with updated roi attributes.
         """
-        image_file = Path(image_file)
-        roi_index = 0
-
-        if not path_roi_data:
-            if not self.paths._path_to_niftis:
-                raise ValueError("The path to the niftis is not defined")
-            else:
-                path_roi_data = self.paths._path_to_niftis
-
-        for file in self.__nifti.stack_path_roi:
-            _id = image_file.name.split("(")[0] # id is PatientID__ImagingScanName
+        def load_mask(_id, file, medscan):
             # Load the patient's ROI nifti files:
             if file.name.startswith(_id) and 'ROI' in file.name.split("."):
                 roi = nib.load(file)
@@ -452,8 +442,27 @@ class DataManager(object):
                 name_set = file.name[file.name.find("_") + 2 : file.name.find("(")]
                 medscan.data.ROI.update_indexes(key=roi_index, indexes=np.nonzero(roi_data.flatten()))
                 medscan.data.ROI.update_name_set(key=roi_index, name_set=name_set)
-                medscan.data.ROI.update_roi_name(key=roi_index, roi_name=roi_name)
+                medscan.data.ROI.update_roi_name(key=roi_index, roi_name=roi_name)  
+            else:
+                raise ValueError(f"The ROI file for patient ID: {_id} "
+                    f"was not found in the given path: {file} or was not correctly named.")   
+        
+        image_file = Path(image_file)
+        roi_index = 0
+        if not path_roi_data:
+            if not self.paths._path_to_niftis:
+                raise ValueError("The path to the niftis is not defined")
+            else:
+                path_roi_data = self.paths._path_to_niftis
+
+            for file in self.__nifti.stack_path_roi:
+                _id = image_file.name.split("(")[0] if ("(") in image_file.name else image_file.name # id is PatientID__ImagingScanName
+                load_mask(_id, file, medscan)
                 roi_index += 1
+        else:
+            _id = image_file.name.split("(")[0] if ("(") in image_file.name else image_file.name # id is PatientID__ImagingScanName
+            load_mask(_id, path_roi_data, medscan)
+
         return medscan
 
     def __associate_spatialRef(self, nifti_file: Union[Path, str], medscan: MEDscan) -> MEDscan:
@@ -567,7 +576,7 @@ class DataManager(object):
             medscan = MEDscan()
             medscan.patientID = os.path.basename(file).split("_")[0]
             medscan.type = os.path.basename(file).split(".")[-3]
-            medscan.series_description = file.name[file.name.find('__') + 2: file.name.find('(')]
+            medscan.series_description = file.name[file.name.find('__') + 2: file.name.find('(')] if '__' in file.name else ""
             medscan.format = "nifti"
             medscan.data.set_orientation(orientation="Axial")
             medscan.data.set_patient_position(patient_position="HFS")
@@ -625,6 +634,24 @@ class DataManager(object):
         if list_instances:
             return list_instances
 
+    def process_one_nifti(self, path_image: Union[Path, str], path_mask: Union[Path, str]) -> MEDscan:
+        """Processes one NIfTI file to create a MEDscan class instance.
+
+        Args:
+            nifti_file (Union[Path, str]): Path to the NIfTI file.
+            path_data (Union[Path, str]): Path to the data.
+        
+        Returns:
+            MEDscan: MEDscan class instance.
+        """
+        medscan = self.__process_one_nifti(path_image, path_mask)
+
+        # SAVE MEDscan INSTANCE
+        if self.save and self.paths._path_save:
+            save_MEDscan(medscan, self.paths._path_save)
+
+        return medscan
+    
     def update_from_csv(self, path_csv: Union[str, Path] = None) -> None:
         """Updates the class from a given CSV and summarizes the processed scans again according to it.
 
