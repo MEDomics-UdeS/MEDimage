@@ -456,7 +456,7 @@ class DataManager(object):
                 path_roi_data = self.paths._path_to_niftis
 
             for file in self.__nifti.stack_path_roi:
-                _id = image_file.name.split("(")[0] if ("(") in image_file.name else image_file.name # id is PatientID__ImagingScanName
+                _id = file.name.split("(")[0] if ("(") in file.name else file.name # id is PatientID__ImagingScanName
                 load_mask(_id, file, medscan)
                 roi_index += 1
         else:
