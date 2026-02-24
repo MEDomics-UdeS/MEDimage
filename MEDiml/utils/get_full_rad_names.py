@@ -16,6 +16,6 @@ def get_full_rad_names(str_user_data: str, rad_var_ids: List):
     full_rad_names = np.array([])
     for rad_var in rad_var_ids:
         ind_var = int(rad_var[6:])
-        full_rad_names = np.append(full_rad_names, str_user_data.split('||')[ind_var].split(':')[1])
+        full_rad_names = np.append(full_rad_names, str_user_data.split('||')[ind_var].split(f"{rad_var}:")[1])
 
     return full_rad_names
