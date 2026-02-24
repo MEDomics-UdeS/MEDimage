@@ -456,7 +456,7 @@ class DataManager(object):
                 path_roi_data = self.paths._path_to_niftis
 
             for file in self.__nifti.stack_path_roi:
-                _id = image_file.name.split("(")[0] if ("(") in image_file.name else image_file.name # id is PatientID__ImagingScanName
+                _id = file.name.split("(")[0] if ("(") in file.name else file.name # id is PatientID__ImagingScanName
                 load_mask(_id, file, medscan)
                 roi_index += 1
         else:
@@ -831,11 +831,13 @@ class DataManager(object):
             for f in tqdm(range(len(file_paths))):
                 try:
                     if file_paths[f].name.endswith("nii.gz") or file_paths[f].name.endswith("nii"):
-                        medscan = nib.load(file_paths[f])
+                        with open(file_paths[f], 'rb') as file:
+                            medscan = pickle.load(file)
                         xy_dim["data"][f] = medscan.header.get_zooms()[0]
                         z_dim["data"][f]  = medscan.header.get_zooms()[2]
                     else:
-                        medscan = np.load(file_paths[f], allow_pickle=True)
+                        with open(file_paths[f], 'rb') as file:
+                            medscan = pickle.load(file)
                         xy_dim["data"][f] = medscan.data.volume.spatialRef.PixelExtentInWorldX
                         z_dim["data"][f]  = medscan.data.volume.spatialRef.PixelExtentInWorldZ
                 except Exception as e:
@@ -1007,7 +1009,8 @@ class DataManager(object):
                     if file.name.endswith('nii.gz') or file.name.endswith('nii'):
                         medscan = self.__process_one_nifti(file, path_data)
                     else:
-                        medscan = np.load(file, allow_pickle=True)
+                        with open(file, 'rb') as file:
+                            medscan = pickle.load(file)
                         if re.search('PTscan', wildcard) and medscan.format != 'nifti':
                             medscan.data.volume.array = compute_suv_map(
                                                         np.double(medscan.data.volume.array), 
