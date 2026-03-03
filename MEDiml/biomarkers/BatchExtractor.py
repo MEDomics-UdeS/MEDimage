@@ -804,7 +804,7 @@ class BatchExtractor(object):
         if ray.is_initialized():
             ray.shutdown()
 
-        ray.init(local_mode=True, include_dashboard=True, num_cpus=self.n_bacth)
+        ray.init(local_mode=True, include_dashboard=False, num_cpus=self.n_bacth)
 
         # Batch all scans from CSV file and compute radiomics for each scan
         self.__batch_all_patients(im_params)
