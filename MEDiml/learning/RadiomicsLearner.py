@@ -163,10 +163,10 @@ class RadiomicsLearner:
         # Initialization
         patient_ids = list(outcome_table_binary.index)
         outcome_table_binary_training = outcome_table_binary.loc[patients_train]
-        var_names = ['var_datacleaning', 'var_normalization', 'var_fSetReduction']
+        var_names = ['cleaning_profile', 'normalization', 'reduction_method']
         flags_preprocessing =  {key: key in ml['variables'][var_id].keys() for key in var_names}
         flags_preprocessing_test = flags_preprocessing.copy()
-        flags_preprocessing_test['var_fSetReduction'] = False
+        flags_preprocessing_test['reduction_method'] = False
 
         # Pre-processing
         rad_var_struct = ml['variables'][var_id]
@@ -179,8 +179,8 @@ class RadiomicsLearner:
             rad_table_learning = get_radiomics_table(path_radiomics_csv, path_radiomics_txt, image_type, patient_ids)
 
             # Data cleaning
-            if flags_preprocessing['var_datacleaning']:
-                cleaning_dict = ml['datacleaning'][ml['variables'][var_id]['var_datacleaning']]['continuous']
+            if flags_preprocessing['cleaning_profile']:
+                cleaning_dict = ml['datacleaning'][ml['variables'][var_id]['cleaning_profile']]['continuous']
                 data_cleaner = DataCleaner(**cleaning_dict)
 
                 # Temp save of properties
@@ -196,8 +196,8 @@ class RadiomicsLearner:
                     continue
 
             # Normalization (ComBat)
-            if flags_preprocessing['var_normalization']:
-                normalization_method = ml['variables'][var_id]['var_normalization']
+            if flags_preprocessing['normalization']:
+                normalization_method = ml['variables'][var_id]['normalization']
                 # Some information must be stored to re-apply combat for testing data
                 if 'combat' in normalization_method.lower():
                     # Training data
@@ -207,10 +207,10 @@ class RadiomicsLearner:
                     rad_table_learning.Properties['userData']['normalization']['original_data']['path_radiomics_txt'] = path_radiomics_txt
                     rad_table_learning.Properties['userData']['normalization']['original_data']['image_type'] = image_type
                     rad_table_learning.Properties['userData']['normalization']['original_data']['patient_ids'] = patient_ids
-                    if flags_preprocessing['var_datacleaning']:
-                        data_cln_method = ml['variables'][var_id]['var_datacleaning']
+                    if flags_preprocessing['cleaning_profile']:
+                        data_cln_method = ml['variables'][var_id]['cleaning_profile']
                         rad_table_learning.Properties['userData']['normalization']['original_data']['datacleaning_method'] = data_cln_method
-                    
+
                     # Apply ComBat
                     normalization = CombatNormalization()
                     rad_table_learning = normalization.fit_transform(rad_table_learning)  # Training data
@@ -233,8 +233,8 @@ class RadiomicsLearner:
             temp_properties.append(deepcopy(rad_tab.Properties))
 
         # Feature set reduction (for training data only)
-        if flags_preprocessing['var_fSetReduction']:
-            f_set_reduction_method = ml['variables'][var_id]['var_fSetReduction']['method']
+        if flags_preprocessing['reduction_method']:
+            f_set_reduction_method = ml['variables'][var_id]['reduction_method']
             fsr = FSR(f_set_reduction_method)
             
             # Apply FDA
@@ -324,13 +324,13 @@ class RadiomicsLearner:
         var_table_train = processed_training_table.loc[patients_train, :]
 
         # Initializing the model settings
-        algorithm = ml['settings']['algorithm']
-        var_importance_threshold = ml['algorithms'][algorithm]['varImportanceThreshold']
-        optimal_threshold = ml['algorithms'][algorithm]['optimalThreshold']
-        optimization_metric = ml['algorithms'][algorithm]['optimizationMetric']
-        method = ml['algorithms'][algorithm]['method'] if 'method' in ml['algorithms'][algorithm].keys() else method
-        use_gpu = ml['algorithms'][algorithm]['useGPU'] if 'useGPU' in ml['algorithms'][algorithm].keys() else True
-        seed = ml['algorithms'][algorithm]['seed'] if 'seed' in ml['algorithms'][algorithm].keys() else None
+        algorithm = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else method
+        var_importance_threshold = ml['modeling']['var_importance_threshold']
+        optimize_threshold = ml['modeling']['optimize_threshold']
+        optimization_metric = ml['modeling']['optimization_metric']
+        method = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else method
+        use_gpu = ml['modeling']['useGPU'] if 'useGPU' in ml['modeling'].keys() else True
+        seed = ml['modeling']['seed'] if 'seed' in ml['modeling'].keys() else None
 
         # B.2. Training the model
         tstart = time.time()
@@ -341,7 +341,7 @@ class RadiomicsLearner:
             algorithm=algorithm,
             ml_config={
             'var_importance_threshold': var_importance_threshold,
-            'optimal_threshold': optimal_threshold,
+            'optimize_threshold': optimize_threshold,
             'optimization_metric': optimization_metric,
             'use_gpu': use_gpu,
             'seed': seed
@@ -349,7 +349,7 @@ class RadiomicsLearner:
         estimator.fit(var_table_train, outcome_table_binary_train)
 
         # Saving the trained model using pickle
-        name_save_model = ml['algorithms'][algorithm]['nameSave']
+        name_save_model = ml['modeling']['nameSave'] if 'nameSave' in ml['modeling'].keys() else None
         model_id = name_save_model + '_' + str(ml['variables']['varStudy'])
         path_model = os.path.dirname(path_results) + '/' + (model_id + '.pickle')
         estimator.save(path_model)

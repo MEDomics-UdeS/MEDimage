@@ -15,14 +15,14 @@ class RandomForestEstimator(BaseEstimator, ClassifierMixin):
             optimization_metric='MCC',
             var_importance_threshold=0.05,
             internal_cv_folds=5,
-            optimal_threshold=None,
+            optimize_threshold=None,
             use_gpu=False,
             seed=None
         ):
         self.optimization_metric = optimization_metric
         self.var_importance_threshold = var_importance_threshold
         self.internal_cv_folds = internal_cv_folds
-        self.optimal_threshold = optimal_threshold
+        self.optimize_threshold = optimize_threshold
         self.use_gpu = use_gpu
         self.seed = seed
         
@@ -103,10 +103,13 @@ class RandomForestEstimator(BaseEstimator, ClassifierMixin):
         model_rf['type'] = 'binary'
         
         # Find threshold
-        try:
-            model_rf['threshold'] = self.__find_balanced_threshold(classifier, var_table_train, outcome_table_binary_train)
-        except Exception as e:
-            print(f'Threshold calculation failed: {e}. Defaulting to 0.5')
+        if self.optimize_threshold:
+            try:
+                model_rf['threshold'] = self.__find_balanced_threshold(classifier, var_table_train, outcome_table_binary_train)
+            except Exception as e:
+                print(f'Threshold calculation failed: {e}. Defaulting to 0.5')
+                model_rf['threshold'] = 0.5
+        else:
             model_rf['threshold'] = 0.5
         
         # Store metadata safely

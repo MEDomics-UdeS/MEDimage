@@ -15,7 +15,7 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
             optimization_metric='MCC',
             var_importance_threshold=0.05,
             internal_cv_folds=5,
-            optimal_threshold=None,
+            optimize_threshold=None,
             use_gpu=False,
             seed=None
         ):
@@ -23,7 +23,7 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
         self.optimization_metric = optimization_metric
         self.var_importance_threshold = var_importance_threshold
         self.internal_cv_folds = internal_cv_folds
-        self.optimal_threshold = optimal_threshold
+        self.optimize_threshold = optimize_threshold
         self.use_gpu = use_gpu
         self.seed = seed
         
@@ -115,11 +115,17 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
         model_xgb = dict()
         model_xgb['algo'] = 'xgb'
         model_xgb['type'] = 'binary'
-        try:
-            model_xgb['threshold'] = self.__find_balanced_threshold(classifier, var_table_train, outcome_table_binary_train)
-        except Exception as e:
-            print('Error in finding optimal threshold, it will be set to 0.5:' + str(e))
+
+        # Find threshold
+        if self.optimize_threshold:
+            try:
+                model_xgb['threshold'] = self.__find_balanced_threshold(classifier, var_table_train, outcome_table_binary_train)
+            except Exception as e:
+                print('Error in finding optimal threshold, it will be set to 0.5:' + str(e))
+                model_xgb['threshold'] = 0.5
+        else:
             model_xgb['threshold'] = 0.5
+
         model_xgb['var_info'] = deepcopy(var_table_train.Properties['userData'])
         model_xgb['var_def'] = deepcopy(var_table_train.Properties['userData']['variables']['var_def'])
         model_xgb['var_names'] = list(classifier.feature_names_in_)
