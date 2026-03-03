@@ -200,7 +200,7 @@ class DesignExperiment:
                     scans = var_struct['scans'] # list of imaging sequences
                     rois = var_struct['rois'] # list of roi labels
                     im_spaces = var_struct['imSpaces'] # list of image spaces (filterd and original)
-                    use_combinations = var_struct['use_combinations'] # boolean to use combinations of scans and im_spaces
+                    use_combinations = var_struct['use_combinations'] if 'use_combinations' in list(var_struct.keys()) else False # boolean to use combinations of scans and im_spaces
                     if use_combinations:
                         all_combinations = []
                         scans = list(var_struct['combinations'].keys())
