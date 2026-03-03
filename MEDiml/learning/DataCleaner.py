@@ -1,198 +1,152 @@
-import random
-from typing import Dict, List
-
 import numpy as np
 import pandas as pd
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.impute import SimpleImputer
+from sklearn.utils import check_random_state
 
 
-class DataCleaner:
+class DataCleaner(BaseEstimator, TransformerMixin):
     """
-    Class that will clean features of the csv by removing features with too many missing values,
-    too little variation, too many missing values per sample, too little variation per sample,
-    and imputing missing values.
+    A scikit-learn compatible transformer that cleans features by removing those 
+    with too many missing values or too little variation, removes samples with 
+    too many missing features, and imputes missing values.
     """
-    def __init__(self, df_features: pd.DataFrame, type: str = "continuous"):
+    def __init__(
+            self, 
+            var_type: str = "continuous",
+            imputation: str = "mean",
+            missingCutoffpf: float = 0.1,
+            missingCutoffps: float = 0.25,
+            covCutoff: float = 0.1,
+            random_state=None
+        ):
         """
-        Constructor of the class DataCleaner
+        Initializes the DataCleaner with specified parameters for feature and sample filtering and imputation.
 
         Args:
-            df_features (pd.DataFrame): Table of features.
-            type (str): Type of variable: "continuous", "hcategorical" or "icategorical". Defaults to "continuous".
-        """
-        self.df_features = df_features
-        self.type = type
-    
-    def __update_df_features(self, var_of_type: List[str], flag_var_out: List[bool]) -> List[str]:
-        """
-        Updates the variable table by deleting the features that are not in the variable of type
-
-        Args:
-            var_of_type (List[str]): List of variable names.
-            flag_var_out (List[bool]): List of variables to flag out.
+            var_type (str): Type of variable ("continuous", "hcategorical", "icategorical").
+            imputation_method (str): Method of imputation ("mean", "median", "mode", "random").
+            missing_cutoff_pf (float): Max % of missing values allowed per feature (column).
+            missing_cutoff_ps (float): Max % of missing values allowed per sample (row).
+            cov_cutoff (float): Min coefficient of variation allowed per feature.
+            random_state (int, RandomState instance or None): Seed for reproducibility.
         
         Returns:
-            List[str]: List of variable names that were not flagged out.
+            None
         """
-        var_to_delete = np.delete(var_of_type, [i for i, v in enumerate(flag_var_out) if not v])
-        var_of_type = np.delete(var_of_type, [i for i, v in enumerate(flag_var_out) if v])
-        self.df_features = self.df_features.drop(var_to_delete, axis=1)
-        return var_of_type
+        self.var_type = var_type
+        self.imputation_method = imputation
+        self.missing_cutoff_pf = missingCutoffpf
+        self.missing_cutoff_ps = missingCutoffps
+        self.cov_cutoff = covCutoff
+        self.random_state = random_state
+        
+        # Attributes learned during fit
+        self.features_to_keep_ = None
+        self.imputer_ = None
 
-    def cut_off_missing_per_sample(self, var_of_type: List[str], missing_cutoff : float = 0.25) -> None:
+    def fit(self, X: pd.DataFrame, y: pd.DataFrame=None):
         """
-        Removes observations/samples with more than ``missing_cutoff`` missing features.
+        Learns which features to keep based on missingness and variation thresholds.
 
         Args:
-            var_of_type (List[str]): List of variable names.
-            missing_cutoff (float): Maximum percentage cut-offs of missing features per sample. Defaults to 25%.
+            X (pd.DataFrame): Input feature data.
+            y (pd.DataFrame, optional): Ignored, present for API consistency by convention.
         
         Returns:
-            None.
+            DataCleaner: Returns self.
         """
-        # Initialization
-        n_observation, n_features = self.df_features.shape
-        empty_vec = np.zeros(n_observation, dtype=int)
-        data = self.df_features[var_of_type]
-        empty_vec += data.isna().sum(axis=1).values
+        # Ensure input is a DataFrame
+        X = self._validate_input(X)
         
-        # Gathering results
-        ind_obs_out = np.where(((empty_vec/n_features) > missing_cutoff) == True)
-        self.df_features = self.df_features.drop(self.df_features.index[ind_obs_out])
-    
-    def cut_off_missing_per_feature(self, var_of_type: List[str], missing_cutoff : float = 0.1) -> List[str]:
-        """
-        Removes features with more than ``missing_cutoff`` missing patients.
+        # 1. Identify features to keep based on missingness (per feature)
+        missing_frac = X.isna().mean()
+        features_by_missing = missing_frac[missing_frac <= self.missing_cutoff_pf].index.tolist()
 
-        Args:
-            var_of_type (list): List of variable names.
-            missing_cutoff (float): maximal percentage cut-offs of missing patient samples per variable.
+        # 2. Identify features to keep based on Coefficient of Variation (CV)
+        # We calculate CV only on the features that passed the missingness check
+        X = X[features_by_missing]
         
-        Returns:
-            List[str]: List of variable names that were not flagged out.
-        """
-        flag_var_out = (((self.df_features[var_of_type].isna().sum()) / self.df_features.shape[0]) > missing_cutoff)
-        return self.__update_df_features(var_of_type, flag_var_out)
-
-    def cut_off_variation(self, var_of_type: List[str], cov_cutoff : float = 0.1) -> List[str]:
-        """
-        Removes features with a coefficient of variation (cov) less than ``cov_cutoff``.
-
-        Args:
-            var_of_type (list): List of variable names.
-            cov_cutoff (float): minimal coefficient of variation cut-offs over samples per variable. Defaults to 10%.
-        
-        Returns:
-            List[str]: List of variable names that were not flagged out.
-        """
+        # Handle division by zero or near-zero means by adding epsilon
         eps = np.finfo(np.float32).eps
-        cov_df_features = (self.df_features[var_of_type].std(skipna=True) / self.df_features[var_of_type].mean(skipna=True))
-        flag_var_out = cov_df_features.abs().add(eps) < cov_cutoff
-        return self.__update_df_features(var_of_type, flag_var_out)
-    
-    def impute_missing(self, var_of_type: List[str], imputation_method : str = "mean") -> None:
-        """
-        Imputes missing values of the features of type.
-
-        Args:
-            var_of_type (list): List of variable names.
-            imputation_method (str): Method of imputation. Can be "mean", "median", "mode" or "random".
-                For "random" imputation, a seed can be provided by adding the seed value after the method 
-                name, for example "random42".
+        std = X.std(skipna=True)
+        mean = X.mean(skipna=True).abs() + eps
+        cv = std / mean
         
-        Returns:
-            None.
-        """
-        if self.type in ['continuous', 'hcategorical']:
-            # random imputation
-            if 'random' in imputation_method:
-                if len(imputation_method) > 6:
-                    try:
-                        seed = int(imputation_method[7:])
-                        random.seed(seed)
-                    except Exception as e:
-                        print(f"Warning: Seed must be an integer. Random seed will be set to None. str({e})")
-                        random.seed(a=None)
-                else:
-                    random.seed(a=None)
-                self.df_features[var_of_type] = self.df_features[var_of_type].apply(lambda x: x.fillna(random.choice(list(x.dropna(axis=0)))))
-            
-            # Imputation with median
-            elif 'median' in imputation_method:
-                self.df_features[var_of_type] = self.df_features[var_of_type].fillna(self.df_features[var_of_type].median())
-            
-            # Imputation with mean
-            elif 'mean' in imputation_method:
-                self.df_features[var_of_type] = self.df_features[var_of_type].fillna(self.df_features[var_of_type].mean())
-            
-            else:
-                raise ValueError("Imputation method for continuous and hcategorical features must be 'random', 'median' or 'mean'.")
+        self.features_to_keep_ = cv[cv >= self.cov_cutoff].index.tolist()
+        X = X[self.features_to_keep_]
+
+        # 3. Fit the Imputer on the selected features
+        self._fit_imputer(X)
         
-        elif self.type in ['icategorical']:
-            if 'random' in imputation_method:
-                if len(imputation_method) > 6:
-                    seed = int(imputation_method[7:])
-                    random.seed(seed)
-                else:
-                    random.seed(a=None)
+        return self
 
-                self.df_features[var_of_type] = self.df_features[var_of_type].apply(lambda x: x.fillna(random.choice(list(x.dropna(axis=0)))))
+    def transform(self, X: pd.DataFrame):
+        """
+        Applies feature selection, sample filtering, and imputation.
+        """
+        # check is fitted
+        if self.features_to_keep_ is None:
+            raise RuntimeError("You must fit the transformer before transforming data.")
+            
+        X = self._validate_input(X)
+        
+        # 1. Filter Features (Columns)
+        # Only keep columns learned during fit
+        X_transformed = X[self.features_to_keep_].copy()
+        
+        # 2. Filter Samples (Rows) based on missingness
+        missing_frac_rows = X_transformed.isna().mean(axis=1)
+        mask_rows_keep = missing_frac_rows <= self.missing_cutoff_ps
+        X_transformed = X_transformed.loc[mask_rows_keep]
+        
+        # 3. Impute Missing Values
+        X_imputed = self._apply_imputation(X_transformed)
+        
+        # Return as DataFrame to maintain column names
+        return pd.DataFrame(X_imputed, columns=self.features_to_keep_, index=X_transformed.index)
 
-            if 'mode' in imputation_method:
-                self.df_features[var_of_type] = self.df_features[var_of_type].fillna(self.df_features[var_of_type].mode().max())
+    def _fit_imputer(self, X):
+        """Helper to initialize and fit the correct imputer logic."""
+        # Handle 'random' manually as SimpleImputer doesn't support it
+        if "random" in self.imputation_method:
+            self.imputer_ = "random" # Marker logic
+            return
+
+        # Map methods to SimpleImputer strategies
+        strategy_map = {
+            "mean": "mean",
+            "median": "median",
+            "mode": "most_frequent"
+        }
+        
+        # Default logic for icategorical (mode) vs continuous (mean/median)
+        if self.imputation_method not in strategy_map:
+             # Fallback logic from original class
+             if self.var_type == "icategorical":
+                 strategy = "most_frequent"
+             else:
+                 strategy = "mean"
         else:
-            raise ValueError("Variable type must be 'continuous', 'hcategorical' or 'icategorical'.")
-        
-    def __call__(self, cleaning_dict: Dict, imputation_method: str = "mean", 
-                missing_cutoff_ps: float = 0.25, missing_cutoff_pf: float = 0.1, 
-                cov_cutoff:float = 0.1) -> pd.DataFrame:
-        """
-        Applies data cleaning to the features of type.
+            strategy = strategy_map[self.imputation_method]
 
-        Args:
-            cleaning_dict (dict): Dictionary of cleaning parameters (missing cutoffs and coefficient of variation cutoffs etc.).
-            var_of_type (list, optional): List of variable names.
-            imputation_method (str): Method of imputation. Can be "mean", "median", "mode" or "random".
-                For "random" imputation, a seed can be provided by adding the seed value after the method 
-                name, for example "random42".
-            missing_cutoff_ps (float, optional): maximal percentage cut-offs of missing features per sample.
-            missing_cutoff_pf (float, optional): maximal percentage cut-offs of missing samples per variable.
-            cov_cutoff (float, optional): minimal coefficient of variation cut-offs over samples per variable.
-        
-        Returns:
-            pd.DataFrame: Cleaned table of features.
-        """
+        self.imputer_ = SimpleImputer(strategy=strategy)
+        self.imputer_.fit(X)
 
-        # Initialization
-        var_of_type = self.df_features.Properties['userData']['variables']['continuous']
+    def _apply_imputation(self, X):
+        """Helper to apply the imputation."""
+        if self.imputer_ == "random":
+            rng = check_random_state(self.random_state)
+            # Custom random imputation logic: fill NaNs with random choice from valid values in that column
+            return X.apply(lambda col: col.fillna(
+                np.random.choice(col.dropna().values) if not col.dropna().empty else col.mean() # Fallback if empty
+            ))
+        else:
+            return self.imputer_.transform(X)
 
-        # Retrieve thresholds from cleaning_dict if not None
-        if cleaning_dict is not None:
-            missing_cutoff_pf = cleaning_dict['missingCutoffpf']
-            missing_cutoff_ps = cleaning_dict['missingCutoffps']
-            cov_cutoff = cleaning_dict['covCutoff']
-            imputation_method = cleaning_dict['imputation']
-        
-        # Replace infinite values with NaNs
-        self.df_features = self.df_features.replace([np.inf, -np.inf], np.nan)
-
-        # Remove features with more than missing_cutoff_pf missing samples (NaNs)
-        var_of_type = self.cut_off_missing_per_feature(var_of_type, missing_cutoff_pf)
-
-        # Check
-        if len(var_of_type) == 0:
-            return None
-
-        # Remove features with a coefficient of variation less than cov_cutoff
-        var_of_type = self.cut_off_variation(var_of_type, cov_cutoff)
-
-        # Check
-        if len(var_of_type) == 0:
-            return None
-
-        # Remove scans with more than missing_cutoff_ps missing features
-        self.cut_off_missing_per_sample(var_of_type, missing_cutoff_ps)
-
-        # Impute missing values
-        self.impute_missing(var_of_type, imputation_method)
-
-        return self.df_features
+    def _validate_input(self, X):
+        """Ensures X is a DataFrame and handles infinite values."""
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X)
+        # Replace infs with NaNs (as per original class)
+        return X.replace([np.inf, -np.inf], np.nan)

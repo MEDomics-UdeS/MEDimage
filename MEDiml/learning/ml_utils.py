@@ -8,82 +8,94 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas
 import pandas as pd
-import seaborn as sns
 from numpyencoder import NumpyEncoder
+from sklearn.base import BaseEstimator
 from sklearn.model_selection import StratifiedKFold
 
 from MEDiml.utils import get_institutions_from_ids
 from MEDiml.utils.get_full_rad_names import get_full_rad_names
 from MEDiml.utils.json_utils import load_json, save_json
 
-
 # Define useful constants
 # Metrics to process
-list_metrics = [
+METRICS_LIST = [
     'AUC', 'AUPRC', 'BAC', 'Sensitivity', 'Specificity',
     'Precision', 'NPV', 'F1_score', 'Accuracy', 'MCC',
     'TN', 'FP', 'FN', 'TP'
 ]
 
-def average_results(path_results: Path, save: bool = False) -> None:
+def average_results(path_results: Path, save: bool = False) -> dict:
     """
-    Averages the results (AUC, BAC, Sensitivity and Specifity) of all the runs of the same experiment,
-    for training, testing and holdout sets.
+    Averages the results (including mean, std, and percentiles) of all the runs 
+    of the same experiment for training, testing, and holdout sets.
 
     Args:
         path_results(Path): path to the folder containing the results of the experiment.
         save (bool, optional): If True, saves the results in the same folder as the model.
     
     Returns:
-        None.
+        Dict: Aggregated results for all datasets.
     """
-    # Get all tests paths
-    list_path_tests =  [path for path in path_results.iterdir() if path.is_dir()]
+    # 1. Optimized File I/O: Get all file paths first
+    list_path_tests = [path / 'run_results.json' for path in path_results.iterdir() if path.is_dir()]
+    
+    # 2. Extract data into a flat list of records (One pass through files)
+    records = []
+    for file_path in list_path_tests:
+        if not file_path.exists():
+            continue
+        
+        data = load_json(file_path)
+        model_id = list(data.keys())[0]
+        model_data = data[model_id]
 
-    # Initialize dictionaries
-    results_avg = {
-        'train': {},
-        'test': {},
-        'holdout': {}
-    }
+        for dataset in ['train', 'test', 'holdout']:
+            metrics_data = model_data.get(dataset, {}).get('metrics')
+            if metrics_data:
+                # Flatten metrics and tag with dataset name
+                row = {**metrics_data, 'dataset_name': dataset}
+                records.append(row)
 
-    # Metrics to process
-    metrics = ['AUC', 'AUPRC', 'BAC', 'Sensitivity', 'Specificity',
-            'Precision', 'NPV', 'F1_score', 'Accuracy', 'MCC',
-            'TN', 'FP', 'FN', 'TP']
+    if not records:
+        return {}
 
-    # Process metrics
+    # 3. Vectorized Aggregation using Pandas
+    df = pd.DataFrame(records)
+    results_avg = {}
+
     for dataset in ['train', 'test', 'holdout']:
-        dataset_dict = results_avg[dataset]
-        for metric in metrics:
-            metric_values = []
-            for path_test in list_path_tests:
-                results_dict = load_json(path_test / 'run_results.json')
-                if dataset in results_dict[list(results_dict.keys())[0]].keys():
-                    if 'metrics' in results_dict[list(results_dict.keys())[0]][dataset].keys():
-                        metric_values.append(results_dict[list(results_dict.keys())[0]][dataset]['metrics'][metric])
-                    else:
-                        continue
-                else:
-                    continue
+        ds_df = df[df['dataset_name'] == dataset].drop(columns='dataset_name')
+        
+        # Skipt if empty
+        if ds_df.empty:
+            results_avg[dataset] = {}
+            continue
 
-            # Fill the dictionary
-            if metric_values:
-                dataset_dict[f'{metric}_mean'] = np.nanmean(metric_values)
-                dataset_dict[f'{metric}_std'] = np.nanstd(metric_values)
-                dataset_dict[f'{metric}_max'] = np.nanmax(metric_values)
-                dataset_dict[f'{metric}_min'] = np.nanmin(metric_values)
-                dataset_dict[f'{metric}_2.5%'] = np.nanpercentile(metric_values, 2.5)
-                dataset_dict[f'{metric}_97.5%'] = np.nanpercentile(metric_values, 97.5)
+        # Calculate all stats at once across all metric columns
+        summary = ds_df.apply(lambda x: pd.Series({
+            'mean': np.nanmean(x),
+            'std': np.nanstd(x),
+            'max': np.nanmax(x),
+            'min': np.nanmin(x),
+            '2.5%': np.nanpercentile(x, 2.5),
+            '97.5%': np.nanpercentile(x, 97.5)
+        }))
 
-    # Save the results
+        # Reshape into the requested {metric}_{stat} format
+        results_avg[dataset] = {
+            f"{col}_{stat}": val 
+            for col in summary.columns 
+            for stat, val in summary[col].items()
+        }
+
+    # 4. Save and Return
     if save:
-        save_json(path_results / 'results_avg.json', results_avg, cls=NumpyEncoder)
-        return path_results / 'results_avg.json'
+        save_path = path_results / 'results_avg.json'
+        save_json(save_path, results_avg, cls=NumpyEncoder)
+        return save_path
 
     return results_avg
 
@@ -483,13 +495,13 @@ def find_best_model(path_results: Path, metric: str = 'AUC', second_metric: str 
     Returns:
         Tuple[Dict, Path]: Tuple containing the best model result dict and the path to the best model.
     """
-    list_metrics = [
+    METRICS_LIST = [
         'AUC', 'Sensitivity', 'Specificity', 
         'BAC', 'AUPRC', 'Precision', 
         'NPV', 'Accuracy', 'F1_score', 'MCC',
         'TP', 'TN', 'FP', 'FN'
     ]
-    assert metric in list_metrics, f'Given metric {metric} is not in the list of metrics. Please choose from {list_metrics}'
+    assert metric in METRICS_LIST, f'Given metric {metric} is not in the list of metrics. Please choose from {METRICS_LIST}'
 
     # Get all tests paths
     list_path_tests =  [path for path in path_results.iterdir() if path.is_dir()]
@@ -524,58 +536,66 @@ def find_best_model(path_results: Path, metric: str = 'AUC', second_metric: str 
     
     return model, results_dict_best
 
-def feature_imporance_analysis(path_results: Path):
+def feature_importance_analysis(path_results: Path):
     """
-    Averages the results (AUC, BAC, Sensitivity and Specifity) of all the runs of the same experiment,
-    for training, testing and holdout sets.
+    Analyzes and averages feature importance across all experimental runs.
+    Calculates the mean importance (among selections) and selection frequency.
 
     Args:
-        path_results(Path): path to the folder containing the results of the experiment.
-        save (bool, optional): If True, saves the results in the same folder as the model.
-    
-    Returns:
-        None.
+        path_results (Path): Path to the folder containing the experiment run directories.
     """
-    # Get all tests paths
-    list_path_tests =  [path for path in path_results.iterdir() if path.is_dir()]
+    list_path_tests = [path for path in path_results.iterdir() if path.is_dir()]
+    importance_accumulator = {}
 
-    # Initialization
-    results_avg_temp = {}
-    results_avg = {}
-
-    # Process metrics
     for path_test in list_path_tests:
-        variables = []
         list_models = list(path_test.glob('*.pickle'))
-        if len(list_models) == 0 or len(list_models) > 1:
-            raise ValueError(f'Path {path_test} does not contain a single model.')
-        model_obj = list_models[0]
-        with open(model_obj, "rb") as f:
-            model_dict = pickle.load(f)
-        if model_dict["var_names"]:
-            variables = get_full_rad_names(model_dict['var_info']['variables']['var_def'], model_dict["var_names"])
-        for index, var in enumerate(variables):
-            var = var.split("\\")[-1]   # Remove the path for windows
-            var = var.split("/")[-1]    # Remove the path for linux
-            if var not in results_avg_temp:
-                results_avg_temp[var] = {
-                    'importance_mean': [],
-                    'times_selected': 0
-                }
-            
-            results_avg_temp[var]['importance_mean'].append(model_dict['model'].feature_importances_[index])
-            results_avg_temp[var]['times_selected'] += 1
-    for var in results_avg_temp:
-        results_avg[var] = {
-            'importance_mean': np.sum(results_avg_temp[var]['importance_mean']) / len(list_path_tests),
-            'times_selected': results_avg_temp[var]['times_selected']
-        }
-    
-    del results_avg_temp
-            
-    save_json(path_results / 'feature_importance_analysis.json', results_avg, cls=NumpyEncoder)
+        
+        if len(list_models) != 1:
+            print(f"Skipping {path_test}: Expected 1 pickle model, found {len(list_models)}.")
+            continue
+        
+        import joblib
+        pipeline = joblib.load(list_models[0])
 
-def get_ml_test_table(variable_table: pd.DataFrame, var_names: List, var_def: str) -> pd.DataFrame:
+        # Extract feature names and importances
+        if hasattr(pipeline, 'estimator_') \
+            and hasattr(pipeline.estimator_, 'model_info_') \
+            and hasattr(pipeline.estimator_, 'classifier_') \
+            and hasattr(pipeline.estimator_.classifier_, 'feature_importances_'):
+            variables = get_full_rad_names(
+                pipeline.estimator_.model_info_['var_info']['variables']['var_def'], 
+                pipeline.estimator_.model_info_['var_names']
+            )
+            importances = pipeline.estimator_.classifier_.feature_importances_
+
+            # Accumulate importance values for each variable
+            for index, var_path in enumerate(variables):
+                var_name = Path(var_path).name
+                
+                if var_name not in importance_accumulator:
+                    importance_accumulator[var_name] = []
+                
+                importance_accumulator[var_name].append(importances[index])
+
+    # Aggregate results
+    total_runs = len(list_path_tests)
+    final_analysis = {
+        var: {
+            'importance_mean': np.sum(vals) / total_runs if total_runs > 0 else 0,  # Average over all runs (including zeros for non-selections)
+            'importance_std': np.std(vals),
+            'times_selected': len(vals),
+            'selection_frequency': (len(vals) / total_runs) * 100 if total_runs > 0 else 0
+        }
+        for var, vals in importance_accumulator.items()
+    }
+
+    # Sort by importance_mean descending for better readability
+    final_analysis = dict(sorted(final_analysis.items(), key=lambda item: item[1]['importance_mean'], reverse=True))
+
+    save_json(path_results / 'feature_importance_analysis.json', final_analysis, cls=NumpyEncoder)
+    return final_analysis
+
+def get_ml_test_table(estimator: BaseEstimator, variable_table: pd.DataFrame) -> pd.DataFrame:
     """
     Gets the test table with the variables that are present in the training table.
 
@@ -588,6 +608,10 @@ def get_ml_test_table(variable_table: pd.DataFrame, var_names: List, var_def: st
     Returns:
         pd.DataFrame: Table with the variables that are present in the training table.
     """
+
+    # retrieve the necessary information from the variable table
+    var_names = estimator.estimator_.model_info_['var_names']
+    var_def = estimator.estimator_.model_info_['var_info']['variables']['var_def']
 
     # Get the full variable names for training
     full_radvar_names_trained = get_full_rad_names(var_def, var_names).tolist()

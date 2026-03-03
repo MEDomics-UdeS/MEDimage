@@ -17,7 +17,7 @@ from networkx.drawing.nx_pydot import graphviz_layout
 from numpyencoder import NumpyEncoder
 from sklearn import metrics
 
-from MEDiml.learning.ml_utils import feature_imporance_analysis, list_metrics
+from MEDiml.learning.ml_utils import feature_importance_analysis, METRICS_LIST
 from MEDiml.learning.Stats import Stats
 from MEDiml.utils.json_utils import load_json, save_json
 from MEDiml.utils.texture_features_names import *
@@ -36,7 +36,7 @@ class Results:
         model_id (str): ID of the model.
         results_dict (dict): Dictionary containing the results of the model's performance.
     """
-    def __init__(self, model_dict: dict = {}, model_id: str = "") -> None:
+    def __init__(self, model_dict: dict = None, model_id: str = "") -> None:
         """
         Constructor of the class Results
         """
@@ -46,7 +46,7 @@ class Results:
 
     def __calculate_performance(
             self, 
-            response: list, 
+            response: pd.Series, 
             labels: pd.DataFrame, 
             thresh: float
         ) -> dict:
@@ -61,70 +61,48 @@ class Results:
         Returns:
             Dict: Dictionary containing the performance metrics.
         """
-        # Recording results
-        results_dict = dict()
-
-        # Removing Nans
-        df = labels.copy()
-        outcome_name = labels.columns.values[0]
-        df['response'] = response
-        df.dropna(axis=0, how='any', inplace=True)
-
-        # Confusion matrix elements:
-        results_dict['TP'] = ((df['response'] >= thresh) & (df[outcome_name] == 1)).sum()
-        results_dict['TN'] = ((df['response'] < thresh) & (df[outcome_name] == 0)).sum()
-        results_dict['FP'] = ((df['response'] >= thresh) & (df[outcome_name] == 0)).sum()
-        results_dict['FN'] = ((df['response'] < thresh) & (df[outcome_name] == 1)).sum()
+        outcome_name = labels.columns[0]
+        # Align data and drop NaNs once
+        df = pd.concat([labels, response.rename('response')], axis=1).dropna()
         
-        # Copying confusion matrix elements
-        TP = results_dict['TP']
-        TN = results_dict['TN']
-        FP = results_dict['FP']
-        FN = results_dict['FN']
+        y_true = df[outcome_name]
+        y_prob = df['response']
+        y_pred = (y_prob >= thresh).astype(int)
 
-        # AUC
-        results_dict['AUC'] = metrics.roc_auc_score(df[outcome_name], df['response'])
+        # Vectorized Confusion Matrix
+        tn, fp, fn, tp = metrics.confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
 
-        # AUPRC
-        results_dict['AUPRC'] = metrics.average_precision_score(df[outcome_name], df['response'])
+        # Pre-calculate sums to avoid repeated addition
+        actual_pos = tp + fn
+        actual_neg = tn + fp
+        pred_pos = tp + fp
+        pred_neg = tn + fn
+        total = actual_pos + actual_neg
 
-        # Sensitivity
-        try:
-            results_dict['Sensitivity'] = TP / (TP + FN)
-        except:
-            print('TP + FN = 0, Division by 0, replacing sensitivity by 0.0')
-            results_dict['Sensitivity'] = 0.0
+        # Calculate metrics using vectorized scalars
+        res = {
+            'TP': int(tp), 'TN': int(tn), 'FP': int(fp), 'FN': int(fn),
+            'AUC': metrics.roc_auc_score(y_true, y_prob),
+            'AUPRC': metrics.average_precision_score(y_true, y_prob),
+            'Sensitivity': tp / actual_pos if actual_pos > 0 else 0.0,
+            'Specificity': tn / actual_neg if actual_neg > 0 else 0.0,
+            'Precision': tp / pred_pos if pred_pos > 0 else 0.0,
+            'NPV': tn / pred_neg if pred_neg > 0 else 0.0,
+            'Accuracy': (tp + tn) / total if total > 0 else 0.0,
+        }
+        
+        res['BAC'] = (res['Sensitivity'] + res['Specificity']) / 2
+        res['F1_score'] = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 0.0
+        
+        # Matthews Correlation Coefficient
+        mcc_denom = np.sqrt(pred_pos * actual_pos * actual_neg * pred_neg)
+        res['MCC'] = (tp * tn - fp * fn) / mcc_denom if mcc_denom > 0 else 0.0
 
-        # Specificity
-        try:
-            results_dict['Specificity'] = TN / (TN + FP)
-        except:
-            print('TN + FP= 0, Division by 0, replacing specificity by 0.0')
-            results_dict['Specificity'] = 0.0
-
-        # Balanced accuracy
-        results_dict['BAC'] = (results_dict['Sensitivity'] + results_dict['Specificity']) / 2
-
-        # Precision
-        results_dict['Precision'] = TP / (TP + FP)
-
-        # NPV (Negative Predictive Value)
-        results_dict['NPV'] = TN / (TN + FN)
-
-        # Accuracy
-        results_dict['Accuracy'] = (TP + TN) / (TP + TN + FP + FN)
-
-        # F1 score
-        results_dict['F1_score'] = 2 * TP / (2 * TP + FP + FN)
-
-        # mcc (mathews correlation coefficient)
-        results_dict['MCC'] = (TP * TN - FP * FN) / np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
-
-        return results_dict
+        return res
     
     def __get_metrics_failure_dict(
             self, 
-            metrics: list = list_metrics
+            metrics: list = METRICS_LIST
         ) -> dict:
         """
         This function fills the metrics with NaNs in case of failure.
@@ -218,7 +196,7 @@ class Results:
         for key in list(radiomics_tables_dict.keys()):
             if key.lower().startswith('radtab'):
                 table_path = radiomics_tables_dict[key]['original_data']['path_radiomics_csv']
-                table_name = table_path.split('/')[-1]
+                table_name = Path(table_path).name
                 table = pd.read_csv(table_path, index_col=0)
                 # Morph
                 if 'morph' in table_name.lower():
@@ -320,8 +298,8 @@ class Results:
                 break   # The number of patients is the same for all the runs
 
         return patients_count
-    
-    def average_results(self, path_results: Path, save: bool = False) -> None:
+            
+    def average_results(self, path_results: Path, save: bool = False) -> dict:
         """
         Averages the results (AUC, BAC, Sensitivity and Specifity) of all the runs of the same experiment,
         for training, testing and holdout sets.
@@ -331,49 +309,97 @@ class Results:
             save (bool, optional): If True, saves the results in the same folder as the model.
         
         Returns:
-            None.
+            dict: Averaged results for each dataset.
         """
-        # Get all tests paths
-        list_path_tests =  [path for path in path_results.iterdir() if path.is_dir()]
-
-        # Initialize dictionaries
-        results_avg = {
-            'train': {},
-            'test': {},
-            'holdout': {}
-        }
+        list_path_tests = [path / 'run_results.json' for path in path_results.iterdir() if path.is_dir()]
         
-        # Retrieve metrics
-        for dataset in ['train', 'test', 'holdout']:
-            dataset_dict = results_avg[dataset]
-            for metric in list_metrics:
-                metric_values = []
-                for path_test in list_path_tests:
-                    results_dict = load_json(path_test / 'run_results.json')
-                    if dataset in results_dict[list(results_dict.keys())[0]].keys():
-                        if 'metrics' in results_dict[list(results_dict.keys())[0]][dataset].keys():
-                            metric_values.append(results_dict[list(results_dict.keys())[0]][dataset]['metrics'][metric])
-                        else:
-                            continue
-                    else:
-                        continue
+        all_metrics = []
+        for p in list_path_tests:
+            data = load_json(p)
+            model_key = list(data.keys())[0]
+            
+            # Flatten metrics into a list of dicts with 'dataset' as a key
+            for ds in ['train', 'test', 'holdout']:
+                if ds in data[model_key] and 'metrics' in data[model_key][ds]:
+                    m = data[model_key][ds]['metrics'].copy()
+                    m['dataset'] = ds
+                    all_metrics.append(m)
 
-                # Fill the dictionary
-                if metric_values:
-                    dataset_dict[f'{metric}_mean'] = np.nanmean(metric_values)
-                    dataset_dict[f'{metric}_std'] = np.nanstd(metric_values)
-                    dataset_dict[f'{metric}_max'] = np.nanmax(metric_values)
-                    dataset_dict[f'{metric}_min'] = np.nanmin(metric_values)
-                    dataset_dict[f'{metric}_2.5%'] = np.nanpercentile(metric_values, 2.5)
-                    dataset_dict[f'{metric}_97.5%'] = np.nanpercentile(metric_values, 97.5)
+        if not all_metrics:
+            return {}
 
-        # Save the results
+        df_all = pd.DataFrame(all_metrics)
+        results_avg = {}
+
+        for ds in ['train', 'test', 'holdout']:
+            ds_df = df_all[df_all['dataset'] == ds].drop(columns='dataset')
+            if ds_df.empty:
+                results_avg[ds] = {}
+                continue
+
+            # Vectorized aggregation for all metrics at once
+            stats = ds_df.agg(['mean', 'std', 'max', 'min']).to_dict()
+            
+            # Flatten the nested stats into your required format
+            results_avg[ds] = {
+                f"{met}_{stat}": val 
+                for met, s_dict in stats.items() 
+                for stat, val in s_dict.items()
+            }
+
         if save:
             save_json(path_results / 'results_avg.json', results_avg, cls=NumpyEncoder)
-            return path_results / 'results_avg.json'
-
+        
         return results_avg
     
+    def bootstrap_metrics(
+            self, 
+            response: np.ndarray, 
+            labels: pd.DataFrame, 
+            thresh: float, 
+            n_bootstraps: int = 100
+        ) -> dict:
+        """
+        Computes 95% Confidence Intervals using bootstrap resampling.
+
+        Args:
+            response (np.ndarray): Array of the probabilities of class "1" for all instances (prediction).
+            labels (pd.DataFrame): Column vector specifying the outcome status (1 or 0) for all instances.
+            thresh (float): Optimal threshold selected from the ROC curve.
+            n_bootstraps (int, optional): Number of bootstrap samples. Defaults to 100.
+
+        Returns:
+            dict: Dictionary containing the 95% confidence intervals for each metric.
+        """
+        bootstrapped_stats = []
+        rng = np.random.default_rng()
+        
+        # Ensure input is numpy for fast indexing
+        y_true = labels.iloc[:, 0].values
+        y_prob = np.array(response)
+
+        for _ in range(n_bootstraps):
+            indices = rng.integers(0, len(y_true), len(y_true))
+            if len(np.unique(y_true[indices])) < 2:
+                continue
+                
+            # Reuse the optimized calculation logic
+            res = self.__calculate_performance(
+                pd.Series(y_prob[indices]), 
+                pd.DataFrame(y_true[indices]), 
+                thresh
+            )
+            bootstrapped_stats.append(res)
+
+        df_boot = pd.DataFrame(bootstrapped_stats)
+        ci_results = {}
+        
+        for metric in df_boot.columns:
+            ci_results[f"{metric}_95ci_low"] = np.percentile(df_boot[metric], 2.5)
+            ci_results[f"{metric}_95ci_high"] = np.percentile(df_boot[metric], 97.5)
+
+        return ci_results
+
     def get_model_performance(
             self, 
             response: list, 
@@ -443,7 +469,7 @@ class Results:
         Returns:
             None.
         """
-        assert metric.split('_')[0] in list_metrics, f'Given metric {list_metrics} is not in the list of metrics. Please choose from {list_metrics}'
+        assert metric.split('_')[0] in METRICS_LIST, f'Given metric {METRICS_LIST} is not in the list of metrics. Please choose from {METRICS_LIST}'
         
         # Extract modalities and initialize the dictionary
         if type(experiments_labels[0]) == str:
@@ -680,7 +706,7 @@ class Results:
         Returns:
             None.
         """
-        assert metric.split('_')[0] in list_metrics, f'Given metric {list_metrics} is not in the list of metrics. Please choose from {list_metrics}'
+        assert metric.split('_')[0] in METRICS_LIST, f'Given metric {METRICS_LIST} is not in the list of metrics. Please choose from {METRICS_LIST}'
         
         # Extract modalities and initialize the dictionary
         if type(experiments_labels[0]) == str:
@@ -1200,7 +1226,7 @@ class Results:
                 if 'feature_importance_analysis.json' in os.listdir(path_experiments / exp_full_name):
                     fa_dict = load_json(path_experiments / exp_full_name / 'feature_importance_analysis.json')
                 else:
-                    fa_dict = feature_imporance_analysis(path_experiments / exp_full_name)
+                    fa_dict = feature_importance_analysis(path_experiments / exp_full_name)
 
                 # Extract percentage of features per level
                 perc_levels = np.round(self.__count_percentage_levels(fa_dict), 2)
@@ -1304,7 +1330,7 @@ class Results:
             if 'feature_importance_analysis.json' in os.listdir(path_experiments / exp_full_name):
                 fa_dict = load_json(path_experiments / exp_full_name / 'feature_importance_analysis.json')
             else:
-                fa_dict = feature_imporance_analysis(path_experiments / exp_full_name)
+                fa_dict = feature_importance_analysis(path_experiments / exp_full_name)
             
             # Organize data
             feature_data = {
@@ -1617,7 +1643,7 @@ class Results:
             if 'feature_importance_analysis.json' in os.listdir(path_experiments / exp_full_name):
                 fa_dict = load_json(path_experiments / exp_full_name / 'feature_importance_analysis.json')
             else:
-                fa_dict = feature_imporance_analysis(path_experiments / exp_full_name)
+                fa_dict = feature_importance_analysis(path_experiments / exp_full_name)
             
             # Organize data
             feature_data = {
@@ -1944,7 +1970,7 @@ class Results:
             if 'feature_importance_analysis.json' in os.listdir(path_experiments / exp_full_name):
                 fa_dict = load_json(path_experiments / exp_full_name / 'feature_importance_analysis.json')
             else:
-                fa_dict = feature_imporance_analysis(path_experiments / exp_full_name)
+                fa_dict = feature_importance_analysis(path_experiments / exp_full_name)
             
             # Organize data
             feature_data = {
@@ -2190,7 +2216,7 @@ class Results:
             
             # Save the plot (Mandatory, since the plot is not well displayed on matplotlib)
             fig.savefig(path_experiments / f'TF_{experiment}_{level}_{modality}_explanation_tree.png', dpi=300)
-
+        
     def to_json(
             self, 
             response_train: list = None, 
@@ -2198,7 +2224,10 @@ class Results:
             response_holdout: list = None, 
             patients_train: list = None,
             patients_test: list = None, 
-            patients_holdout: list = None
+            patients_holdout: list = None,
+            outcome_table_binary_train: pd.DataFrame = None,
+            outcome_table_binary_test: pd.DataFrame = None,
+            outcome_table_binary_holdout: pd.DataFrame = None
         ) -> dict:
         """
         Creates a dictionary with the results of the model using the class attributes.
@@ -2206,32 +2235,45 @@ class Results:
         Args:
             response_train (list): List of machine learning model predictions for the training set.
             response_test (list): List of machine learning model predictions for the test set.
+            response_holdout (list): List of machine learning model predictions for the holdout set.
             patients_train (list): List of patients in the training set.
             patients_test (list): List of patients in the test set.
             patients_holdout (list): List of patients in the holdout set.
+            outcome_table_binary_train (pd.DataFrame): Binary outcome table for the training set.
+            outcome_table_binary_test (pd.DataFrame): Binary outcome table for the test set.
+            outcome_table_binary_holdout (pd.DataFrame): Binary outcome table for the holdout set.
         
         Returns:
             Dict: Dictionary with the the responses of the model and the patients used for training, testing and holdout.
         """
-        run_results = dict()
-        run_results[self.model_id] = self.model_dict
+        # Initialization
+        run_results = {self.model_id: self.model_dict}
+        threshold = self.model_dict.get('threshold', 0.5)
 
-        # Training results info
-        run_results[self.model_id]['train'] = dict()
-        run_results[self.model_id]['train']['patients'] = patients_train
-        run_results[self.model_id]['train']['response'] = response_train.tolist() if response_train is not None else []
+        # Map datasets for cleaner iteration
+        datasets = {
+            'train': (response_train, patients_train, outcome_table_binary_train),
+            'test': (response_test, patients_test, outcome_table_binary_test),
+            'holdout': (response_holdout, patients_holdout, outcome_table_binary_holdout)
+        }
 
-        # Testing results info
-        run_results[self.model_id]['test'] = dict()
-        run_results[self.model_id]['test']['patients'] = patients_test
-        run_results[self.model_id]['test']['response'] = response_test.tolist() if response_test is not None else []
+        for name, (resp, pts, outcome) in datasets.items():
+            run_results[self.model_id][name] = {
+                'patients': pts,
+                'response': resp.tolist() if hasattr(resp, 'tolist') else (resp or [])
+            }
 
-        # Holdout results info
-        run_results[self.model_id]['holdout'] = dict()
-        run_results[self.model_id]['holdout']['patients'] = patients_holdout
-        run_results[self.model_id]['holdout']['response'] = response_holdout.tolist() if response_holdout is not None else []
+            # Only calculate if we have both predictions and ground truth
+            if resp is not None and outcome is not None:
+                # 1. Vectorized Point Estimates
+                metrics_dict = self.get_model_performance(resp, outcome)
+                
+                # 2. Bootstrap Confidence Intervals (95% CI)
+                ci_dict = self.bootstrap_metrics(resp, outcome, threshold)
+                
+                # Merge both into the metrics entry
+                run_results[self.model_id][name]['metrics'] = {**metrics_dict, **ci_dict}
 
-        # keep a copy of the results
         self.results_dict = run_results
 
         return run_results
