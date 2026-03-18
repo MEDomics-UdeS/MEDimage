@@ -293,8 +293,9 @@ class MEDscan(object):
             
             if self.type == 'PTscan' and _compute_suv_map and self.format != 'nifti':
                 try:
-                    from .processing.compute_suv_map import compute_suv_map
-                    self.data.volume.array = compute_suv_map(self.data.volume.array, self.dicomH[0])
+                    from .processing.PETSUVConverter import PETSUVConverter
+                    suv_converter = PETSUVConverter(self.dicomH)
+                    self.data.volume.array = suv_converter.compute(self.data.volume.array)
                 except Exception as e :
                     message = f"\n ERROR COMPUTING SUV MAP - SOME FEATURES WILL BE INVALID: \n {e}"
                     logging.error(message)
