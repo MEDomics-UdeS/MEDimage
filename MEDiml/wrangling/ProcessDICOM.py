@@ -76,6 +76,81 @@ class ProcessDICOM():
         
         return orientation
 
+    def __get_minimal_suv_header(self, dcm: pydicom.Dataset) -> dict:
+        """
+        Extracts only the tags required for SUV conversion and PET scaling.
+        This dict is Ray-serializable and free of weakrefs.
+        """
+        def find_philips_private_tags(ds):
+            # Find which block Philips reserved
+            offset = None
+            for i in range(0x10, 0x100, 0x01):
+                tag = (0x7053, i)
+                if tag in ds and ds[tag].value.lower().startswith("philips"):
+                    # If (7053, 0011) is the creator, the offset is 0x1100
+                    offset = i << 8 
+                    break
+                    
+            if offset:
+                suv_tag = (0x7053, offset + 0x00)
+                act_tag = (0x7053, offset + 0x09)
+                print(f"Philips Tags Found at: SUV={hex(suv_tag[1])}, Act={hex(act_tag[1])}")
+                return ds.get(suv_tag), ds.get(act_tag)
+            
+            print("Creator 'Philips PET Private Group' not found in group 0x7053.")
+            return None, None
+
+        suv_elem, act_elem = find_philips_private_tags(dcm)
+        # Map the tags to their values (storing as hex strings for keys)
+        tags = [
+            0x00101030, 0x00100040, 0x00080031, 0x00080032, 0x00080021, 0x00541102, 
+            0x00181072, 0x00181078, 0x00281052, 0x00281053, 0x00080070, 0x00541001,
+            0x00541001, 0x00541006, 0x00101020, 0x00101040, 0x00280030, 0x00180050,   
+        ]
+
+        suv_data = {}
+        for t in tags:
+            if t in dcm:
+                suv_data[t] = dcm[t].value
+            elif t == 0x00541006 and 0x00541001 in dcm and dcm[0x00541001].value == 'GML':
+                suv_data[t] = 'BW'  #  If absent, and the Units are GML, then the type of SUV shall be assumed to be BW.
+
+        # Handle the Radiopharmaceutical Sequence specially
+        radio_tag = 0x00540016
+        if radio_tag in dcm and dcm[radio_tag]:
+            item = dcm[radio_tag][0]
+            sub_tags = [0x00181072, 0x00181074, 0x00181075, 0x00181078]
+            radio_dict = {st: item[st].value for st in sub_tags if st in item}
+            suv_data[radio_tag] = [radio_dict] # List of dicts
+
+        # Extra tags depending on the unit type
+        if 0x00541001 in dcm:
+            unit = str(dcm[0x00541001].value).lower()
+            if unit == 'cnts':
+                # SD SUV scale factor
+                if 0x70531000 in dcm:
+                    suv_data[0x70531000] = dcm[0x70531000].value
+                # If not found, try DS Activity Concentration Scale Factor
+                elif 0x70531009 in dcm:
+                    suv_data[0x70531000] = dcm[0x70531009].value
+                # If still not found, try Frame Duration (for dynamic PET)
+                elif 0x00181242 in dcm:
+                    suv_data[0x00181242] = dcm[0x00181242].value
+                    # Dose Calibration Factor (Needed to convert to CPS then to BQML)
+                    if 0x00541322 in dcm:
+                        suv_data[0x00541322] = dcm[0x00541322].value
+                    # Corrected image tag
+                    if 0x00280051 in dcm:
+                        suv_data[0x00280051] = dcm[0x00280051].value
+            elif unit == 'cps':
+                # Doe Calibration Factor
+                if 0x00541322 in dcm:
+                    suv_data[0x00541322] = dcm[0x00541322].value
+                # Corrected image tag
+                if 0x00280051 in dcm:
+                    suv_data[0x00280051] = dcm[0x00280051].value
+        return suv_data
+
     def __merge_slice_pixel_arrays(self, slice_datasets):
         first_dataset = slice_datasets[0]
         num_rows = first_dataset.Rows
@@ -84,14 +159,16 @@ class ProcessDICOM():
 
         sorted_slice_datasets = self.__sort_by_slice_spacing(slice_datasets)
 
-        if any(self.__requires_rescaling(d) for d in sorted_slice_datasets):
-            voxels = np.empty(
-                (num_columns, num_rows, num_slices), dtype=np.float32)
+        if self.__requires_rescaling(sorted_slice_datasets):
+            if not self.__rescaling_is_the_same(sorted_slice_datasets):
+                if not self.__intercept_is_zero(sorted_slice_datasets):
+                    # The scan is skipped is the RescaleSlope attribute has multiple values across slices and the RescaleIntercept is not zero.
+                    return None
+            voxels = np.empty((num_columns, num_rows, num_slices), dtype=np.float32)
             for k, dataset in enumerate(sorted_slice_datasets):
                 slope = float(getattr(dataset, 'RescaleSlope', 1))
                 intercept = float(getattr(dataset, 'RescaleIntercept', 0))
-                voxels[:, :, k] = dataset.pixel_array.T.astype(
-                    np.float32)*slope + intercept
+                voxels[:, :, k] = dataset.pixel_array.T.astype(np.float32) * slope + intercept
         else:
             dtype = first_dataset.pixel_array.dtype
             voxels = np.empty((num_columns, num_rows, num_slices), dtype=dtype)
@@ -100,8 +177,23 @@ class ProcessDICOM():
 
         return voxels
 
-    def __requires_rescaling(self, dataset):
-        return hasattr(dataset, 'RescaleSlope') or hasattr(dataset, 'RescaleIntercept')
+    def __requires_rescaling(self, slice_datasets):
+        return any(hasattr(dataset, 'RescaleSlope') or hasattr(dataset, 'RescaleIntercept') for dataset in slice_datasets)
+
+    def __rescaling_is_the_same(self, slice_datasets):
+        first_slope = float(getattr(slice_datasets[0], 'RescaleSlope', 1))
+        for dataset in slice_datasets[1:]:
+            slope = float(getattr(dataset, 'RescaleSlope', 1))
+            if slope != first_slope:
+                return False
+        return True
+
+    def __intercept_is_zero(self, slice_datasets):
+        for dataset in slice_datasets:
+            intercept = float(getattr(dataset, 'RescaleIntercept', 0))
+            if intercept != 0:
+                return False
+        return True
 
     def __ijk_to_patient_xyz_transform_matrix(self, slice_datasets):
         first_dataset = self.__sort_by_slice_spacing(slice_datasets)[0]
@@ -299,6 +391,8 @@ class ProcessDICOM():
         self.__validate_slices_form_uniform_grid(slice_datasets)
 
         voxels = self.__merge_slice_pixel_arrays(slice_datasets)
+        if voxels is None:
+            return None, None, None, None
         transform, rotation, scaling = self.__ijk_to_patient_xyz_transform_matrix(
             slice_datasets)
 
@@ -345,6 +439,8 @@ class ProcessDICOM():
             # https://dicom-numpy.readthedocs.io/en/latest/index.html#dicom_numpy.combine_slices
             try:
                 voxel_ndarray, ijk_to_xyz, rotation_m, scaling_m = self.combine_slices(dicom_hi)
+                if voxel_ndarray is None:
+                    return None
             except ValueError as e:
                 raise ValueError(f'Invalid DICOM data for combine_slices(). Error: {e}')
 
@@ -387,11 +483,13 @@ class ProcessDICOM():
             
             # DICOM HEADERS OF IMAGING DATA
             dicom_h = [
-                pydicom.dcmread(str(dicom_file),stop_before_pixels=True,force=True) for dicom_file in self.path_images
+                pydicom.dcmread(str(dicom_file),stop_before_pixels=True) for dicom_file in self.path_images
                 ]
             for i in range(0, len(dicom_h)):
                 dicom_h[i].remove_private_tags()
-            medscan.dicomH = dicom_h
+
+            # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
+            medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])
 
             # DICOM RTstruct (if applicable)
             if self.path_rs is not None and len(self.path_rs) > 0:
@@ -496,11 +594,7 @@ class ProcessDICOM():
                 name_complete = save_MEDscan(medscan, self.path_save)
                 del medscan
             else:
-                series_description = medscan.series_description.translate({ord(ch): '-' for ch in '/\\ ()&:*'})
-                name_id = medscan.patientID.translate({ord(ch): '-' for ch in '/\\ ()&:*'})
-
-                # final saving name
-                name_complete = name_id + '__' + series_description + '.' + medscan.type + '.npy'
+                return medscan
 
         except Exception as e:
             if 'SeriesDescription' in dicom_hi[0]:

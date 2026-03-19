@@ -60,9 +60,6 @@ class FSR:
             # Keep only variables that are in both tables
             _, outcome_table_binary = intersect_var_tables(variable_table, outcome_table_binary)
 
-            # Under-sample the outcome table to equalize the number of positive and negative outcomes
-            #outcome_table_binary_balanced = under_sample(outcome_table_binary)
-
             # Get the patient teach split
             patients_teach_splits = get_stratified_splits(
                 outcome_table_binary, 
@@ -648,6 +645,7 @@ class FSR:
             ml (dict): Machine learning dictionary containing the learning options.
             variable_table (List): Table of variables.
             outcome_table_binary (pd.DataFrame): Table of binary outcomes.
+            path_save_logging (Path, optional): Path to save logging information. Defaults to None.
 
         Returns:
             List: Table of variables after feature set reduction.
