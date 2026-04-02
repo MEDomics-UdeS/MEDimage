@@ -182,7 +182,12 @@ class PETSUVConverter:
 
     def _compute_bqml(self, raw_pet: np.ndarray) -> np.ndarray:
         try:
-            scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+            scantime = None
+            if 0x0009100D in self.dcm:
+                scantime = self._parse_time(str(self.dcm[0x0009100D].value))
+            else:
+                scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+
             radio_item = self.dcm[0x0054, 0x0016][0]
 
             if (0x0018, 0x1072) not in radio_item and (0x0018, 0x1078) in radio_item:
@@ -198,9 +203,17 @@ class PETSUVConverter:
 
             if decay_correction == 'ADMIN':
                 injected_dose_decay = injected_dose
-            elif decay_correction in ['START', 'NONE']:
+            elif decay_correction == 'START':
                 decay = np.exp(-np.log(2) * (scantime - injection_time) / half_life)
                 injected_dose_decay = injected_dose * decay
+            elif decay_correction == 'NONE':
+                _lambda = np.log(2) / half_life
+                injected_dose_decay = injected_dose * np.exp(-_lambda * (scantime - injection_time))
+                if 0x00181242 not in self.dcm:
+                    raise KeyError("Frame Duration (0018,1242) is required for 'NONE' decay correction but is missing.")
+                frame_durantion_sec = float(self.dcm.get(0x00181242, 0)) / 1000.0
+                factor = (_lambda * frame_durantion_sec) / (1 - np.exp(-_lambda * frame_durantion_sec))
+                injected_dose_decay = injected_dose * (1 / factor) * np.exp(-_lambda * (scantime - injection_time))
             else:
                 raise ValueError(f"Unrecognized decay correction status: {decay_correction}")
 
@@ -224,6 +237,8 @@ class PETSUVConverter:
     @staticmethod
     def _parse_time(time_str: str) -> float:
         """Helper to convert HHMMSS string to total seconds."""
+        if '.' in time_str and len(time_str.split('.')[0]) > 6:
+            time_str = time_str[8:] # Handle cases where time is prefixed with date
         time_str = str(time_str).zfill(6)
         hh, mm, ss = float(time_str[0:2]), float(time_str[2:4]), float(time_str[4:6])
         return hh * 3600.0 + mm * 60.0 + ss

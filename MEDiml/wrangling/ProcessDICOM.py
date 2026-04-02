@@ -81,31 +81,22 @@ class ProcessDICOM():
         Extracts only the tags required for SUV conversion and PET scaling.
         This dict is Ray-serializable and free of weakrefs.
         """
-        def find_philips_private_tags(ds):
+        def find_philips_private_tags(ds, suv_data):
             # Find which block Philips reserved
-            offset = None
-            for i in range(0x10, 0x100, 0x01):
-                tag = (0x7053, i)
-                if tag in ds and ds[tag].value.lower().startswith("philips"):
-                    # If (7053, 0011) is the creator, the offset is 0x1100
-                    offset = i << 8 
-                    break
-                    
-            if offset:
-                suv_tag = (0x7053, offset + 0x00)
-                act_tag = (0x7053, offset + 0x09)
-                print(f"Philips Tags Found at: SUV={hex(suv_tag[1])}, Act={hex(act_tag[1])}")
-                return ds.get(suv_tag), ds.get(act_tag)
+            tags = [0x70531000, 0x70531009, 0x00181242]  # Known possible tags for SUV scale factor in Philips PET
+            suv_data['Manufacturer'] = 'Philips'
+            for tag in tags:
+                if tag in ds and tag not in list(suv_data.keys()):
+                    suv_data[tag] = ds[tag].value
             
-            print("Creator 'Philips PET Private Group' not found in group 0x7053.")
-            return None, None
+            return suv_data
 
-        suv_elem, act_elem = find_philips_private_tags(dcm)
         # Map the tags to their values (storing as hex strings for keys)
         tags = [
-            0x00101030, 0x00100040, 0x00080031, 0x00080032, 0x00080021, 0x00541102, 
+            0x00101030, 0x00100040, 0x00080031, 0x00080032, 0x00080022, 0x00080021, 
             0x00181072, 0x00181078, 0x00281052, 0x00281053, 0x00080070, 0x00541001,
             0x00541001, 0x00541006, 0x00101020, 0x00101040, 0x00280030, 0x00180050,   
+            0x00541102
         ]
 
         suv_data = {}
@@ -126,29 +117,25 @@ class ProcessDICOM():
         # Extra tags depending on the unit type
         if 0x00541001 in dcm:
             unit = str(dcm[0x00541001].value).lower()
-            if unit == 'cnts':
-                # SD SUV scale factor
-                if 0x70531000 in dcm:
-                    suv_data[0x70531000] = dcm[0x70531000].value
-                # If not found, try DS Activity Concentration Scale Factor
-                elif 0x70531009 in dcm:
-                    suv_data[0x70531000] = dcm[0x70531009].value
-                # If still not found, try Frame Duration (for dynamic PET)
-                elif 0x00181242 in dcm:
-                    suv_data[0x00181242] = dcm[0x00181242].value
-                    # Dose Calibration Factor (Needed to convert to CPS then to BQML)
-                    if 0x00541322 in dcm:
-                        suv_data[0x00541322] = dcm[0x00541322].value
-                    # Corrected image tag
-                    if 0x00280051 in dcm:
-                        suv_data[0x00280051] = dcm[0x00280051].value
-            elif unit == 'cps':
-                # Doe Calibration Factor
+            if unit == 'cnts' or unit == 'cps':
+                # Dose Calibration Factor (Needed to convert to CPS then to BQML)
                 if 0x00541322 in dcm:
                     suv_data[0x00541322] = dcm[0x00541322].value
                 # Corrected image tag
                 if 0x00280051 in dcm:
                     suv_data[0x00280051] = dcm[0x00280051].value
+            
+            # Private tag for GE
+            elif unit == 'bqml':
+                if 0x0009100D in dcm: # GE private tag: PET Scan DateTime
+                    suv_data[0x0009100D] = dcm[0x0009100D].value
+                if 0x00181242 in dcm: # Actual Frame Duration attribute
+                    suv_data[0x00181242] = dcm[0x00181242].value
+
+        # custom tags for Philips PET scanners (if present)
+        if 'philips' in dcm.Manufacturer.lower():
+            find_philips_private_tags(dcm, suv_data)
+        
         return suv_data
 
     def __merge_slice_pixel_arrays(self, slice_datasets):
@@ -485,8 +472,6 @@ class ProcessDICOM():
             dicom_h = [
                 pydicom.dcmread(str(dicom_file),stop_before_pixels=True) for dicom_file in self.path_images
                 ]
-            for i in range(0, len(dicom_h)):
-                dicom_h[i].remove_private_tags()
 
             # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
             medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])
@@ -499,8 +484,6 @@ class ProcessDICOM():
                                     force=True)
                     for dicom_file in self.path_rs
                 ]
-                for i in range(0, len(dicom_rs_full)):
-                    dicom_rs_full[i].remove_private_tags()
 
             # GATHER XYZ POINTS OF ROIs USING RTstruct
             n_rs = len(dicom_rs_full) if type(dicom_rs_full) is list else dicom_rs_full
