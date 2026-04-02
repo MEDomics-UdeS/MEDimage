@@ -24,13 +24,13 @@ from ..utils.json_utils import load_json, save_json
 
 
 class RadiomicsLearner:
-    def __init__(self, path_study: Path, path_settings: Path, experiment_label: str) -> None:
+    def __init__(self, path_study: Path, path_workspace: Path, path_settings: Path, experiment_label: str) -> None:
         """
         Constructor of the class DesignExperiment.
 
         Args:
-            path_study (Path): Path to the main study folder where the outcomes, 
-                learning patients and holdout patients dictionaries are found.
+            path_study (Path): Path to the main study folder where patients partition dictionaries are found.
+            path_workspace (Path): Path to the workspace folder where features and outcomes tables are found.
             path_settings (Path): Path to the settings folder.
             experiment_label (str): String specifying the label to attach to a given learning experiment in 
                 "path_experiments". This label will be attached to the ml__$experiments_label$.json file as well
@@ -41,6 +41,7 @@ class RadiomicsLearner:
             None
         """
         self.path_study = Path(path_study)
+        self.path_workspace = Path(path_workspace)
         self.path_settings = Path(path_settings)
         self.experiment_label = experiment_label
     
@@ -435,7 +436,7 @@ class RadiomicsLearner:
             None
         """
         # Initialize the DesignExperiment class
-        experiment = DesignExperiment(self.path_study, self.path_settings, self.experiment_label)
+        experiment = DesignExperiment(self.path_study, self.path_workspace, self.path_settings, self.experiment_label)
 
         # Generate the machine learning experiment
         path_file_ml_paths = experiment.generate_experiment()

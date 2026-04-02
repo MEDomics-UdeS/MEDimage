@@ -13,7 +13,7 @@ from .ml_utils import cross_validation_split, get_stratified_splits
 
 
 class DesignExperiment:
-    def __init__(self, path_study: Path, path_settings: Path, experiment_label: str) -> None:
+    def __init__(self, path_study: Path, path_workspace: Path, path_settings: Path, experiment_label: str) -> None:
         """
         Constructor of the class DesignExperiment.
 
@@ -31,6 +31,7 @@ class DesignExperiment:
         """
         self.path_study = Path(path_study)
         self.path_settings = Path(path_settings)
+        self.path_workspace = Path(path_workspace)
         self.experiment_label = str(experiment_label)
         self.path_ml_object = None
 
@@ -64,7 +65,7 @@ class DesignExperiment:
         save_json(path_test, sorted(patients_test))
         paths_ml['patientsTrain'] = path_train
         paths_ml['patientsTest'] = path_test
-        paths_ml['outcomes'] = self.path_study / 'outcomes.csv'
+        paths_ml['outcomes'] = self.path_workspace / 'outcomes.csv'
         paths_ml['ml'] = self.path_ml_object
         paths_ml['results'] = path_run / 'run_results.json'
         path_file = path_run / 'paths_ml.json'
@@ -150,7 +151,7 @@ class DesignExperiment:
                     # Get radiomics features in workspace
                     if 'settofeatures' in var_struct['path'].lower():
                         name_folder = re.match(r"setTo(.*)inWorkspace", var_struct['path']).group(1)
-                        path_features = self.path_study / name_folder
+                        path_features = self.path_workspace / name_folder
                     # Get radiomics features in path provided in the dictionary by the user 
                     else:
                         path_features = var_struct['path']
@@ -196,7 +197,7 @@ class DesignExperiment:
                     # get path to csv file of features
                     if not var_struct['path']:
                         if var_options['pathCSV'] == 'setToCSVinWorkspace':
-                            path_csv = self.path_study / 'CSV'
+                            path_csv = self.path_workspace / 'CSV'
                         else:
                             path_csv = var_options['pathCSV']
                         var_struct['path'] = path_csv / var_struct['nameFile']
@@ -247,7 +248,7 @@ class DesignExperiment:
         patients_learn = load_json(self.path_study / 'patientsLearn.json')
         
         # Outcomes table
-        outcomes_table = pd.read_csv(self.path_study / 'outcomes.csv', index_col=0)
+        outcomes_table = pd.read_csv(self.path_workspace / 'outcomes.csv', index_col=0)
 
         # keep only patients in learn set and outcomes table
         patients_to_keep = list(filter(lambda x: x in patients_learn, outcomes_table.index.values.tolist()))
