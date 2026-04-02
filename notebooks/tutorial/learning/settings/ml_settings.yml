@@ -1,0 +1,114 @@
+# =============================================================================
+# MASTER EXPERIMENT CONFIGURATION
+# =============================================================================
+
+study_metadata:
+  var_study: "var1"
+  combinations: ["var1"]
+  seed: &global_seed 54288
+
+# -----------------------------------------------------------------------------
+# 1. DATA PARTIONING
+# -----------------------------------------------------------------------------
+design:
+  active_method: ["CV"]
+
+  # Option A: Subsampling / Hold-out
+  Random:
+    method: "SubSampling"
+    nSplits: 10
+    stratifyInstitutions: 1
+    testProportion: 0.33
+    seed: *global_seed
+
+  # Option B: Cross-Validation
+  CV:
+    method: "StratifiedKFold"
+    nFolds: 10
+    seed: *global_seed
+
+  # Option C: Bootstrapping
+  Bootstrapping:
+    method: "oob"
+    nIterations: 100
+    sampleSize: 1.0
+    seed: *global_seed
+
+# -----------------------------------------------------------------------------
+# 1. DATA SOURCES & PIPELINE MAPPING
+# -----------------------------------------------------------------------------
+variables:
+  var1:
+    nameType: "RadiomicsFull"
+    path: "setToFeaturesinWorkspace"
+    scans: ["CECT"]
+    rois: ["tumor"]
+    imSpaces: ["image"]
+    cleaning_profile: "default"
+    normalization: "standardCombat"
+    reduction_method: "FDA"
+  
+  var2:
+    nameType: "clinical"
+    nameFile: "clinical_data.csv"
+    path: "setToFeaturesinWorkspace"
+    cleaning_profile: "default"
+
+  varStudy: "var1"
+  combinations: ["var1"]
+
+# -----------------------------------------------------------------------------
+# 2. DATA CLEANING SETTINGS
+# -----------------------------------------------------------------------------
+data_cleaning:
+  default: &default_cleaning
+    continuous:
+      missingCutoffps: 0.25
+      covCutoff: 0.1
+      missingCutoffpf: 0.1
+      imputation: "mean"
+    hcategorical:
+      minNperCat: 2
+      missingCutoff: 0.1
+      maxPercentCat: 0.9
+      missingCutoffps: 0.25
+      imputation: "median"
+    icategorical:
+      minNperCat: 2
+      missingCutoff: 0.1
+      maxPercentCat: 0.9
+      missingCutoffps: 0.25
+      imputation: "mode"
+
+# -----------------------------------------------------------------------------
+# 3. FEATURE REDUCTION
+# -----------------------------------------------------------------------------
+feature_reduction:
+  FDA:
+    nSplits: 100
+    corrType: "Spearman"
+    threshStableStart: 0.5
+    threshInterCorr: 0.7
+    minNfeatStable: 100
+    minNfeatInterCorr: 60
+    minNfeat: 10
+    seed: *global_seed
+
+# -----------------------------------------------------------------------------
+# 4. NORMALIZATION & HARMONIZATION
+# -----------------------------------------------------------------------------
+normalization:
+  standardCombat: "combat"
+
+# -----------------------------------------------------------------------------
+# 5. MODELING
+# -----------------------------------------------------------------------------
+modeling:
+  method: "rf"
+  optimization_metric: "AUC"
+  cv_folds: 5
+  var_importance_threshold: 0.05
+  optimize_threshold: True
+  useGPU: True
+  nameSave: "rf_5perc_CECT"
+  seed: *global_seed
