@@ -230,7 +230,7 @@ class DesignExperiment:
         # return ml
         return path_ml_object
 
-    def create_experiment(self) -> Dict:
+    def create_experiment(self, ml: dict = None) -> Dict:
         """
         Create the machine learning experiment dictionary, organizes each test/split information in a seperate folder.
 
@@ -242,7 +242,7 @@ class DesignExperiment:
         """
         # Initialization
         ml_path = list()
-        ml = load_json(self.path_ml_object)
+        ml = load_json(self.path_ml_object) if ml is None else ml
 
         # Learning set
         patients_learn = load_json(self.path_study / 'patientsLearn.json')
