@@ -18,7 +18,7 @@ class PETSUVConverter:
         """
         self.dcm = dicom_proxy
         self.logger = logging.getLogger(self.__class__.__name__)
-        
+
         # Strategy pattern for dynamic computation routing
         self._strategies = {
             'gml': self._compute_gml,
@@ -72,12 +72,12 @@ class PETSUVConverter:
         delta_time = (series_dt - nuclide_dt).total_seconds()
         decay_correction = 2 ** (-1 * delta_time / half_life)
         suv_factor = (weight_kg * 1000) / (decay_correction * nuclide_dose)
-        
+
         rescale_slope = self.dcm[0x0028, 0x1053].value
         rescale_intercept = self.dcm[0x0028, 0x1052].value
 
         manufacturer = str(self.dcm[0x0008, 0x0070].value).lower()
-        
+
         # Philips private tag logic
         if "philips" in manufacturer and "bqml" not in self.unit:
             if 0x70531000 in self.dcm:
@@ -92,7 +92,7 @@ class PETSUVConverter:
         strategy = self._strategies.get(self.unit)
         if not strategy:
             raise ValueError(f"Unsupported unit '{self.unit}' for SUV computation.")
-        
+
         return strategy(raw_pet)
 
     # ========================================== #
@@ -105,38 +105,54 @@ class PETSUVConverter:
         suv_type = self.dcm.get(0x00541006, 'unknown').lower()
 
         lbm = None
-        bmi = weight_kg / (self.patient_height_cm ** 2) if self.patient_height_cm > 0 else 0
 
         if suv_type == 'lbm':
             if sex == 'M':
                 lbm = 1.10 * weight_kg - 120 * (weight_kg / self.patient_height_cm) ** 2
-            elif sex == 'F' or sex == 'O':
+            elif sex == 'F':
                 lbm = 1.07 * weight_kg - 148 * (weight_kg / self.patient_height_cm) ** 2
+            else:
+                lbm_m = 1.10 * weight_kg - 120 * (weight_kg / self.patient_height_cm) ** 2
+                lbm_f = 1.07 * weight_kg - 148 * (weight_kg / self.patient_height_cm) ** 2
+                lbm = (lbm_m + lbm_f) / 2
 
         elif suv_type == 'lbmjames128':
             if sex == 'M':
                 lbm = 1.10 * weight_kg - 128 * (weight_kg / self.patient_height_cm) ** 2
-            elif sex == 'F' or sex == 'O':
+            elif sex == 'F':
                 lbm = 1.07 * weight_kg - 148 * (weight_kg / self.patient_height_cm) ** 2
-
-        elif suv_type == 'lbmjamna':
-            if sex == 'M':
-                lbm = 9270 * weight_kg / (6680 + 216 * bmi)
             else:
-                lbm = 9270 * weight_kg / (8780 + 244 * bmi)
+                lbm_m = 1.10 * weight_kg - 128 * (weight_kg / self.patient_height_cm) ** 2
+                lbm_f = 1.07 * weight_kg - 148 * (weight_kg / self.patient_height_cm) ** 2
+                lbm = (lbm_m + lbm_f) / 2
+
+        elif suv_type == 'lbmjanma':
+            bmi = weight_kg / (self.patient_height_cm * 10**-2)**2 if self.patient_height_cm > 0 else 0
+            if sex == 'M':
+                lbm = (9270 * weight_kg) / (6680 + 216 * bmi)
+            elif sex == 'F':
+                lbm = (9270 * weight_kg) / (8780 + 244 * bmi)
+            else:
+                lbm_m = (9270 * weight_kg) / (6680 + 216 * bmi)
+                lbm_f = (9270 * weight_kg) / (8780 + 244 * bmi)
+                lbm = (lbm_m + lbm_f) / 2
 
         elif suv_type == 'ibw':
             if sex == 'M':
                 lbm = 48 + 1.06 * (self.patient_height_cm - 152)
-            else:
+            elif sex == 'F':
                 lbm = 45.5 + 0.91 * (self.patient_height_cm - 152)
+            else:
+                lbm_m = 48 + 1.06 * (self.patient_height_cm - 152)
+                lbm_f = 45.5 + 0.91 * (self.patient_height_cm - 152)
+                lbm = (lbm_m + lbm_f) / 2
 
         elif suv_type == 'bw':
             return raw_pet
 
         else:
             raise ValueError(f"Unsupported SUV type '{suv_type}'.")
-        
+
         return (raw_pet / lbm) * weight_kg
 
     def _compute_cm2ml(self, raw_pet: np.ndarray) -> np.ndarray:
@@ -147,15 +163,15 @@ class PETSUVConverter:
     def _compute_cnts(self, raw_pet: np.ndarray) -> np.ndarray:
         if 0x70531000 in self.dcm and float(self.dcm.get(0x70531000)) != 0:
             return raw_pet * float(self.dcm.get(0x70531000))
-        
+
         if 0x70531009 in self.dcm and float(self.dcm.get(0x70531009)) != 0:
             act_scale = float(self.dcm.get(0x70531009))
             return self._compute_bqml(raw_pet * act_scale)
-            
+
         if 0x00181242 in self.dcm and float(self.dcm.get(0x00181242)) != 0:
             frame_duration_sec = float(self.dcm.get(0x00181242)) / 1000.0
             return self._compute_cps(raw_pet / frame_duration_sec)
-        
+
         raise ValueError("No valid scale factor found for 'cnts' unit in DICOM header.")
 
     def _compute_cps(self, cps_map: np.ndarray) -> np.ndarray:
@@ -164,7 +180,7 @@ class PETSUVConverter:
 
         pixel_spacing = self.dcm.get(0x00280030)
         slice_thickness = self.dcm.get(0x00180050)
-        
+
         if not pixel_spacing or not slice_thickness:
             raise KeyError("Voxel dimensions (0028,0030 or 0018,0050) missing.")
 
@@ -182,29 +198,94 @@ class PETSUVConverter:
 
     def _compute_bqml(self, raw_pet: np.ndarray) -> np.ndarray:
         try:
-            scantime = None
-            if 0x0009100D in self.dcm:
-                scantime = self._parse_time(str(self.dcm[0x0009100D].value))
-            else:
-                scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+            def compute_delta_t(acq_date_str, acq_time, inj_time):
+                """
+                Computes the time difference (delta_t) in seconds between radiotracer
+                administration and scan acquisition, handling midnight crossovers.
+                   
+                Returns:
+                    float: delta_t in seconds
+                """
+                from datetime import datetime, timedelta
+ 
+                # 1. Get the datetime for Midnight of the Acquisition Date
+                acq_midnight = datetime.strptime(acq_date_str, "%Y%m%d")
+               
+                # 2. Compute the actual Acquisition timestamp
+                acq_dt = acq_midnight + timedelta(seconds=acq_time)
+               
+                # 3. Initially assume Injection happened on the same calendar day
+                inj_dt = acq_midnight + timedelta(seconds=inj_time)
+               
+                # 4. Handle the Crossover (If Injection > Acquisition, it was yesterday)
+                # 86400 is the number of seconds in a 24-hour day
+                if inj_dt > acq_dt:
+                    inj_dt -= timedelta(seconds=86400)
+                   
+                # 5. Return the final difference
+                delta_t = (acq_dt - inj_dt).total_seconds()
+               
+                return delta_t
+            def __get_referencete_time():
+                acquisition_time = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+                frame_ref_time = self._parse_time(str(self.dcm[0x0054, 0x1300].value)) / 1000.0
+                actual_frame_draution = float(self.dcm.get(0x00181242, 0)) / 1000.0
+                radio_item = self.dcm[0x0054, 0x0016][0]
+                half_life = float(radio_item[0x0018, 0x1075].value)
+                _lambda = np.log(2) / half_life
+                avg_cnt_rate_time = (1 / _lambda) * np.log((_lambda*actual_frame_draution) / (1 - np.exp(-_lambda * actual_frame_draution)))
+                return acquisition_time + avg_cnt_rate_time - frame_ref_time
+ 
+            # Acquisition Time
+            scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
 
+            # Radiopharmaceutical information
             radio_item = self.dcm[0x0054, 0x0016][0]
-
-            if (0x0018, 0x1072) not in radio_item and (0x0018, 0x1078) in radio_item:
+ 
+            if (0x00181072) not in radio_item and (0x00181078) in radio_item:
+                test = str(radio_item[0x0018, 0x1078].value)
                 injection_time = self._parse_time(str(radio_item[0x0018, 0x1078].value)[8:])
-            elif (0x0018, 0x1072) in radio_item:
+            elif (0x00181072) in radio_item:    
+                test = str(radio_item[0x00181072].value)    
                 injection_time = self._parse_time(str(radio_item[0x0018, 0x1072].value))
             else:
                 raise KeyError("Radiopharmaceutical Start Time tags missing.")
-
+ 
             half_life = float(radio_item[0x0018, 0x1075].value)
             injected_dose = float(radio_item[0x0018, 0x1074].value)
             decay_correction = str(self.dcm.get(0x00541102, '')).upper()
-
+            series_times = self._parse_time(str(self.dcm[0x0008, 0x0031].value))
+ 
+            # Decay correction logic
             if decay_correction == 'ADMIN':
                 injected_dose_decay = injected_dose
             elif decay_correction == 'START':
-                decay = np.exp(-np.log(2) * (scantime - injection_time) / half_life)
+                manufacturer = str(self.dcm[0x0008, 0x0070].value).lower()
+                if 'siemens' in manufacturer:
+                    private_scan_datetime = -1.0
+                    if 0x00711022 in self.dcm:
+                        private_scan_datetime = self._parse_time(str(self.dcm.get(0x00711022, None)))
+                    if private_scan_datetime < 0:
+                        if series_times != scantime:
+                            scantime = __get_referencete_time()
+                        else:
+                            scantime = series_times
+                elif 'philips' in manufacturer and scantime != series_times:
+                    scantime = __get_referencete_time()
+                elif 'ge' in manufacturer and scantime != series_times:
+                    if 0x0009100D in self.dcm:
+                        scantime = self._parse_time(str(self.dcm[0x0009100D].value))
+                    else:
+                        scantime = -1.0
+                    if scantime < 0:
+                        frame_ref_time = self._parse_time(str(self.dcm[0x0054, 0x1300].value)) / 1000.0
+                        scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value)) - frame_ref_time
+                else:
+                    scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+                delta_t = scantime - injection_time
+                if injection_time > scantime:
+                    delta_t = compute_delta_t('20250102', scantime, injection_time)
+                decay = np.exp(-np.log(2) * (delta_t) / half_life)
                 injected_dose_decay = injected_dose * decay
             elif decay_correction == 'NONE':
                 _lambda = np.log(2) / half_life
@@ -213,7 +294,10 @@ class PETSUVConverter:
                     raise KeyError("Frame Duration (0018,1242) is required for 'NONE' decay correction but is missing.")
                 frame_durantion_sec = float(self.dcm.get(0x00181242, 0)) / 1000.0
                 factor = (_lambda * frame_durantion_sec) / (1 - np.exp(-_lambda * frame_durantion_sec))
-                injected_dose_decay = injected_dose * (1 / factor) * np.exp(-_lambda * (scantime - injection_time))
+                delta_t = scantime - injection_time
+                if injection_time > scantime:
+                    delta_t = compute_delta_t('20250102', scantime, injection_time)
+                injected_dose_decay = injected_dose * (1 / factor) * np.exp(-_lambda * (delta_t))
             else:
                 raise ValueError(f"Unrecognized decay correction status: {decay_correction}")
 

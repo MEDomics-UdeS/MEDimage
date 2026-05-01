@@ -88,15 +88,15 @@ class ProcessDICOM():
             for tag in tags:
                 if tag in ds and tag not in list(suv_data.keys()):
                     suv_data[tag] = ds[tag].value
-            
+           
             return suv_data
 
         # Map the tags to their values (storing as hex strings for keys)
         tags = [
-            0x00101030, 0x00100040, 0x00080031, 0x00080032, 0x00080022, 0x00080021, 
+            0x00101030, 0x00100040, 0x00080031, 0x00080032, 0x00080022, 0x00080021,
             0x00181072, 0x00181078, 0x00281052, 0x00281053, 0x00080070, 0x00541001,
-            0x00541001, 0x00541006, 0x00101020, 0x00101040, 0x00280030, 0x00180050,   
-            0x00541102
+            0x00541001, 0x00541102, 0x00541006, 0x00541300, 0x00101020, 0x00101040,
+            0x00280030, 0x00180050
         ]
 
         suv_data = {}
@@ -124,18 +124,25 @@ class ProcessDICOM():
                 # Corrected image tag
                 if 0x00280051 in dcm:
                     suv_data[0x00280051] = dcm[0x00280051].value
-            
+
             # Private tag for GE
             elif unit == 'bqml':
                 if 0x0009100D in dcm: # GE private tag: PET Scan DateTime
                     suv_data[0x0009100D] = dcm[0x0009100D].value
                 if 0x00181242 in dcm: # Actual Frame Duration attribute
                     suv_data[0x00181242] = dcm[0x00181242].value
+                if 0x00541300 in dcm: # Frame Reference Time
+                    suv_data[0x00541300] = dcm[0x00541300].value
 
         # custom tags for Philips PET scanners (if present)
         if 'philips' in dcm.Manufacturer.lower():
             find_philips_private_tags(dcm, suv_data)
-        
+
+        # private tags for SIEMENS
+        if 'siemens' in dcm.Manufacturer.lower():
+            if 0x00711022 in dcm:
+                suv_data[0x00711022] = dcm[0x00711022].value
+
         return suv_data
 
     def __merge_slice_pixel_arrays(self, slice_datasets):
