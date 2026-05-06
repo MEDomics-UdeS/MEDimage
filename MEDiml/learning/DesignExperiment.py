@@ -392,9 +392,4 @@ class DesignExperiment:
         # Generate the experiment dictionary
         experiment_dict = self.create_experiment()
         
-        # Saving the final experiment dictionary
-        path_file = self.path_study / f'path_file_ml_paths__{self.experiment_label}.json'
-        experiment_dict = posix_to_string(experiment_dict)  # Convert all paths to string
-        save_json(path_file, experiment_dict)
-        
-        return path_file
+        return experiment_dict

@@ -430,26 +430,9 @@ def create_holdout_set(
     if method == 'random':
         paths_exp_patients_hold_out = str(path_split) + '/patientsHoldOut.json'
         patients_hold_out.to_json(paths_exp_patients_hold_out, orient='values', indent=4)
-
-        # Save dict of all the paths
-        data={
-            "outcomes" : paths_exp_outcomes,
-            "patientsLearn": paths_exp_patientsLearn,
-            "patientsHoldOut": paths_exp_patients_hold_out,
-            "pathWORK": path_split
-        }
-    else:
-        data={
-            "outcomes" : paths_exp_outcomes,
-            "patientsLearn": paths_exp_patientsLearn,
-            "pathWORK": path_split
-        }
-    paths_exp = str(path_split + '/paths_exp.json')
-    with open(paths_exp, 'w') as f:
-        json.dump(data, f, indent=4)
     
     # Return the path to the experiment and path to split
-    return path_split, paths_exp
+    return path_split
 
 def cross_validation_split(
         outcome: List[Union[int, float]], 

@@ -30,7 +30,7 @@ class RadiomicsLearner:
 
         Args:
             path_study (Path): Path to the main study folder where patients partition dictionaries are found.
-            path_workspace (Path): Path to the workspace folder where features and outcomes tables are found.
+            path_workspace (Path): Path to the folder where features and outcome files are found.
             path_settings (Path): Path to the settings folder.
             experiment_label (str): String specifying the label to attach to a given learning experiment in 
                 "path_experiments". This label will be attached to the ml__$experiments_label$.json file as well
@@ -439,10 +439,9 @@ class RadiomicsLearner:
         experiment = DesignExperiment(self.path_study, self.path_workspace, self.path_settings, self.experiment_label)
 
         # Generate the machine learning experiment
-        path_file_ml_paths = experiment.generate_experiment()
+        tests_dict = experiment.generate_experiment()
 
         # Run the different machine learning tests for the experiment
-        tests_dict = load_json(path_file_ml_paths) # Tests dictionary
         for run in tests_dict.keys():
             self.ml_run(tests_dict[run], holdout_test, method)
         
