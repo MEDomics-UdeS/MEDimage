@@ -15,8 +15,8 @@ from MEDiml.learning.Estimator import Estimator
 from MEDiml.learning.FSR import FSR
 from MEDiml.learning.ml_utils import (average_results, combine_rad_tables,
                                       feature_importance_analysis,
-                                      get_ml_test_table, get_radiomics_table,
-                                      intersect)
+                                      find_best_model, get_ml_test_table,
+                                      get_radiomics_table, intersect)
 from MEDiml.learning.Normalization import CombatNormalization
 from MEDiml.learning.Results import Results
 
@@ -103,36 +103,6 @@ class RadiomicsLearner:
         rad_tables_holdout.Properties['userData']['flags_processing'] = {}
 
         return rad_tables_holdout
-    
-    def pre_process_variables(self, ml: Dict, outcome_table_binary: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Loads and pre-processes different radiomics tables from different variable types
-        found in the ml dict.
-        
-        Note: 
-            only patients of the training/learning set should be found in this outcome table.
-
-        Args:
-            ml (Dict): The machine learning dictionary containing the information of the machine learning test.
-            outcome_table_binary (pd.DataFrame): outcome table with binary labels. This table may be used to
-                pre-process some variables with the "FDA" feature set reduction algorithm.
-
-        Returns:
-            Tuple: Two dict of processed radiomics tables, one dict for training and one for 
-                testing (no feature set reduction). 
-        """
-        # Get a list of unique variables found in the ml variables combinations dict
-        variables_id = [s.split('_') for s in ml['variables']['combinations']]
-        variables_id = list(set([x for sublist in variables_id for x in sublist]))
-
-        # For each variable, load the corresponding radiomics table and pre-process it
-        processed_var_tables, processed_var_tables_test =  {var_id : self.pre_process_radiomics_table(
-            ml, 
-            var_id, 
-            outcome_table_binary
-        ) for var_id in variables_id}
-        
-        return processed_var_tables, processed_var_tables_test
 
     def pre_process_radiomics_table(
             self, 
@@ -243,7 +213,7 @@ class RadiomicsLearner:
                 ml, 
                 rad_tables_training, 
                 outcome_table_binary_training, 
-                path_save_logging=ml['path_results']
+                path_save_logging=ml['path_results'] if 'path_results' in list(ml.keys()) else None
             )
 
         # Re-assign properties
@@ -258,14 +228,15 @@ class RadiomicsLearner:
 
         return rad_tables_training, rad_tables_testing
 
-    def ml_run(self, path_ml: Path, holdout_test: bool = True, method: str = 'auto') -> None:
+    def ml_run(self, path_ml: Path, holdout_test: bool = True, model: str = 'xgboost') -> None:
         """
         This function runs the machine learning test for the ceated experiment.
 
         Args:
             path_ml (Path): Path to the main dictionary containing info about the ml current experiment.
             holdout_test (bool, optional): Boolean specifying if the hold-out test should be performed.
-        
+            model (str, optional): Model for model training. Defaults to 'xgboost'.
+                This parameter is used only if the ml dictionary does not contain the "model" key in the "modeling" section.
         Returns:
             None.
         """
@@ -325,11 +296,10 @@ class RadiomicsLearner:
         var_table_train = processed_training_table.loc[patients_train, :]
 
         # Initializing the model settings
-        algorithm = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else method
+        algorithm = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else model
         var_importance_threshold = ml['modeling']['var_importance_threshold']
         optimize_threshold = ml['modeling']['optimize_threshold']
         optimization_metric = ml['modeling']['optimization_metric']
-        method = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else method
         use_gpu = ml['modeling']['useGPU'] if 'useGPU' in ml['modeling'].keys() else True
         seed = ml['modeling']['seed'] if 'seed' in ml['modeling'].keys() else None
 
@@ -420,18 +390,177 @@ class RadiomicsLearner:
         logging.info("\n\n*********************************************************************")
         logging.info('{} TOTAL COMPUTATION TIME: {:.2f} hours'.format(" " * 13, (time.time()-batch_start)/3600))
         logging.info("*********************************************************************")
+
+    def train_final_model(self) -> None:
+        """
+        Train a final model on the full learning set and evaluate on holdout set.
+
+        Returns:
+            None
+        """
+        # Set up logging
+        path_learn = self.path_study / f'learn__{self.experiment_label}'
+        log_file = path_learn / 'final_model.log'
+        logging.basicConfig(filename=log_file, level=logging.INFO, format='%(message)s', filemode='w')
         
-    def run_experiment(self, holdout_test: bool = True, method: str = "pycaret") -> None:
+        batch_start = time.time()
+        logging.info("\n\n********************FINAL MODEL TRAINING********************\n\n")
+        
+        try:
+            # --> Phase 1: Find best model from splits
+            logging.info("--> PHASE 1: FINDING BEST MODEL FROM SPLITS")
+            tstart = time.time()
+            best_model, best_results_dict = find_best_model(path_learn, metric='AUC')
+            model_name = list(best_results_dict.keys())[0]
+            logging.info(f"...Best model found: {model_name}")
+            logging.info(f"...Test AUC: {best_results_dict[model_name]['test']['metrics']['AUC']:.4f}")
+            logging.info(f"...Done in {time.time()-tstart:.2f} sec")
+            
+            # --> Phase 2: Load data for full training
+            logging.info("\n--> PHASE 2: LOADING DATA FOR FULL TRAINING SET")
+            tstart = time.time()
+            
+            # Load patient lists
+            if not (self.path_study / 'patientsLearn.json').exists():
+                logging.error("patientsLearn.json not found in study folder")
+                raise FileNotFoundError(f"patientsLearn.json not found at {self.path_study}")
+            
+            patients_final_train = load_json(self.path_study / 'patientsLearn.json')
+            
+            patients_holdout = None
+            if not (self.path_study / 'patientsHoldOut.json').exists():
+                logging.warning("patientsHoldOut.json not found. Skipping holdout testing.")
+            else:
+                patients_holdout = load_json(self.path_study / 'patientsHoldOut.json')
+            
+            # Load outcomes table
+            outcome_table = pd.read_csv(self.path_workspace / 'outcomes.csv', index_col=0)
+            outcome_table_binary = outcome_table.iloc[:, [0]]
+            
+            # Filter to patients in learning set
+            all_patients = patients_final_train + (patients_holdout or [])
+            all_patients = intersect(all_patients, list(outcome_table_binary.index))
+            
+            # Get ML configuration from one of the splits
+            test_paths = list(path_learn.glob('test__*'))
+            if not test_paths:
+                logging.error("No test folders found in results folder")
+                raise ValueError(f"No test folders found at {path_learn}")
+            
+            ml_dict_paths = load_json(test_paths[0] / 'paths_ml.json')
+            ml = load_json(ml_dict_paths['ml'])
+            var_id = str(ml['variables']['varStudy'])
+            
+            
+            logging.info(f"...Variable ID: {var_id}")
+            logging.info(f"...Done in {time.time()-tstart:.2f} sec")
+            
+            # --> Phase 3: Preprocess full training data
+            logging.info("\n--> PHASE 3: PREPROCESSING FULL TRAINING DATA")
+            tstart = time.time()
+            
+            # Pre-process the full learning set with FSR re-fitted on all data
+            processed_full_train, processed_holdout = self.pre_process_radiomics_table(
+                ml,
+                var_id,
+                outcome_table_binary.copy(),
+                all_patients  # All patients
+            )
+            
+            # Get intersection of patients that survived preprocessing
+            patients_final_train = intersect(patients_final_train, list(processed_full_train.index))                
+
+            # Filter outcome tables
+            outcome_final_train = outcome_table_binary.loc[patients_final_train, :]
+
+            # Apply the process to the holdout set if it exists
+            if patients_holdout:
+                patients_holdout = intersect(patients_holdout, list(processed_holdout.index))
+                outcome_final_holdout = outcome_table_binary.loc[patients_holdout, :]
+
+            logging.info(f"...Learning set size: {len(patients_final_train)} patients")
+            logging.info(f"...Holdout set size: {len(patients_holdout)} patients")
+
+            logging.info(f"...Preprocessed training set size: {len(patients_final_train)} patients")
+            logging.info(f"...Preprocessed holdout set size: {len(patients_holdout)} patients")
+            logging.info(f"...Final feature count: {processed_full_train.shape[1]}")
+            logging.info(f"...Done in {time.time()-tstart:.2f} sec")
+
+            # --> Phase 4: Train final model
+            logging.info("\n--> PHASE 4: TRAINING FINAL MODEL ON FULL LEARNING SET")
+            tstart = time.time()
+
+            # Prepare training data
+            var_table_final_train = processed_full_train.loc[patients_final_train, :]
+
+            # Re-train the final model
+            best_model.fit(var_table_final_train, outcome_final_train)
+
+            # Save the final model
+            name_save_model = ml['modeling']['nameSave'] if 'nameSave' in ml['modeling'].keys() else 'final_model'
+            model_id = name_save_model + '_FINAL_' + str(ml['variables']['varStudy'])
+            path_final_model = path_learn / f'{model_id}.pickle'
+            best_model.save(str(path_final_model))
+
+            logging.info(f"--> DONE. Model saved to {path_final_model}")
+            logging.info(f"...Training time: {time.time()-tstart:.2f} sec")
+
+            if patients_holdout:
+                # --> Phase 5: Evaluate on holdout set
+                logging.info("\n--> PHASE 5: EVALUATING FINAL MODEL ON HOLDOUT SET")
+                tstart = time.time()
+
+                # Prepare holdout data with aligned features
+                var_table_final_holdout = get_ml_test_table(best_model, processed_holdout)
+                var_table_final_holdout = var_table_final_holdout.loc[patients_holdout, :]
+
+                # Generate predictions
+                response_holdout = best_model.predict_proba(var_table_final_holdout)
+
+                logging.info(f"...Holdout predictions generated")
+                logging.info(f"...Done in {time.time()-tstart:.2f} sec")
+
+                # --> Phase 6: Compute and save results
+                logging.info("\n--> PHASE 6: COMPUTING PERFORMANCE METRICS")
+                tstart = time.time()
+
+                result = Results(best_model.estimator_.model_info_, model_id)
+                final_results = result.to_json(
+                    response_holdout=response_holdout,
+                    patients_holdout=patients_holdout,
+                    outcome_table_binary_holdout=outcome_final_holdout
+                )
+                
+                # Save results
+                path_final_results = path_learn / 'final_model_results.json'
+                save_json(path_final_results, final_results, cls=NumpyEncoder)
+            
+                logging.info(f"...Results saved to {path_final_results}")
+                logging.info(f"...Holdout AUC: {final_results[model_id]['holdout']['metrics']['AUC']:.4f}")
+                logging.info(f"...Done in {time.time()-tstart:.2f} sec")
+
+            # Total computing time
+            logging.info("\n\n*********************************************************************")
+            logging.info('{} FINAL MODEL TRAINING COMPLETE'.format(" " * 13))
+            logging.info('{} TOTAL COMPUTATION TIME: {:.2f} hours'.format(" " * 13, (time.time()-batch_start)/3600))
+            logging.info("*********************************************************************")
+            
+        except Exception as e:
+            logging.error(f"\n\nERROR during final model training: {str(e)}", exc_info=True)
+            raise ValueError(f"Final model training failed: {str(e)}")
+ 
+    def run_experiment(self, holdout_test: bool = True, model: str = "xgboost", finalize: bool = False) -> None:
         """
         Run the machine learning experiment for each split/run
 
         Args:
             holdout_test (bool, optional): Boolean specifying if the hold-out test should be performed.
-            method (str, optional): String specifying the method to use to train the model.
-                - "pycaret": Use PyCaret to train the model (automatic).
-                - "grid_search": Grid search with cross-validation to find the best parameters.
-                - "random_search": Random search with cross-validation to find the best parameters.
-            
+            model (str, optional): String specifying the model to use to train the model.
+                - "xgboost": Use XGBoost to train the model.
+                - "rf": Use Random Forest to train the model.
+            finalize (bool, optional): Boolean specifying if a final model should be trained on the full learning set 
+                and tested on the holdout set. The final model will be trained
+
         Returns:
             None
         """
@@ -443,11 +572,14 @@ class RadiomicsLearner:
 
         # Run the different machine learning tests for the experiment
         for run in tests_dict.keys():
-            self.ml_run(tests_dict[run], holdout_test, method)
+            self.ml_run(tests_dict[run], holdout_test, model)
         
         # Average results of the different splits/runs
         average_results(self.path_study / f'learn__{self.experiment_label}', save=True)
 
         # Analyze the features importance for all the runs
         feature_importance_analysis(self.path_study / f'learn__{self.experiment_label}')
-        
+
+        # Train a final model
+        if finalize:
+            self.train_final_model()

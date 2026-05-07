@@ -1,7 +1,5 @@
 import csv
-import json
 import os
-import pickle
 import re
 import string
 from copy import deepcopy
@@ -509,13 +507,18 @@ def find_best_model(path_results: Path, metric: str = 'AUC', second_metric: str 
                 second_metric_best = second_metric_test
                 path_result_best = path_test
     
+    # Check
+    if path_result_best is None:
+        raise ValueError("No model found in the given path.")
+
     # Load best model result dict
     results_dict_best = load_json(path_result_best / 'run_results.json')
 
     # Load model
     model_name = list(results_dict_best.keys())[0]
     with open(path_result_best / f'{model_name}.pickle', 'rb') as file:
-        model = pickle.load(file)
+        import joblib
+        model = joblib.load(file)
     
     return model, results_dict_best
 
@@ -951,53 +954,6 @@ def under_sample(outcome_table_binary: pd.DataFrame) -> pd.DataFrame:
     new_ids = patient_ids_min + patient_ids_sample
 
     return outcome_table_binary.loc[new_ids, :]
-
-def save_model(model: Dict, var_id: str, path_model: Path, ml: Dict = None, name_type: str = "") -> Dict:
-    """
-    Saves a given model locally as a pickle object and outputs a dictionary
-    containing the model's information.
-
-    Args:
-        model (Dict): The model dict to save.
-        var_id (str): The stduied variable. For ex: 'var3'.
-        path_model (str): The path to save the model.
-        ml (Dict, optional): Dicionary containing the settings of the machine learning experiment.
-        name_type (str, optional): String specifying the type of the variable. For examlpe: "RadiomicsIntensity". Default is "".
-    
-    Returns:
-        Dict: A dictionary containing the model's information.
-    """
-    # Saving model
-    with open(path_model, "wb") as f:
-        pickle.dump(model, f)
-
-    # Getting the "var_names" string
-    if ml is not None:
-        var_names = ml['variables'][var_id]['nameType']
-    elif name_type != "":
-        var_names = name_type
-    else:
-        var_names = [var_id]
-
-    # Recording model info
-    model_info = dict()
-    model_info['path'] = path_model
-    model_info['var_ids'] = var_id
-    model_info['var_type'] = var_names
-
-    try: # This part may fail if model training failed.
-        model_info['var_names'] = model['var_names']
-        model_info['var_info'] = model['var_info']
-        if 'normalization' in model_info['var_info'].keys():
-            if 'normalization_table' in model_info['var_info']['normalization'].keys():
-                normalization_struct = write_table_structure(model_info['var_info']['normalization']['normalization_table'])
-                model_info['var_info']['normalization']['normalization_table'] = normalization_struct
-        model_info['threshold'] = model['threshold']
-    except Exception as e:
-        print("Failed to create a fully model info")
-        print(e)
-
-    return model_info
 
 def write_table_structure(data_table: pd.DataFrame) -> Dict:
     """
