@@ -3,7 +3,7 @@
 <img src="https://github.com/MEDomicsLab/MEDiml/blob/main/docs/figures/MEDimlLogo150.png?raw=true" style="width:150px;"/>
 
 [![PyPI - Python Version](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10-blue)](https://www.python.org/downloads/release/python-380/)
-[![PyPI - version](https://img.shields.io/badge/pypi-v0.10.1-blue)](https://pypi.org/project/mediml/)
+[![PyPI - version](https://img.shields.io/badge/pypi-v0.11-blue)](https://pypi.org/project/mediml/)
 [![Continuous Integration](https://github.com/MEDomicsLab/MEDiml/actions/workflows/python-app.yml/badge.svg)](https://github.com/MEDomicsLab/MEDiml/actions/workflows/python-app.yml)
 [![Documentation Status](https://readthedocs.org/projects/mediml/badge/?version=latest)](https://mediml.readthedocs.io/en/latest/?badge=latest)
 [![License: GPL-3](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
