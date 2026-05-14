@@ -574,67 +574,70 @@ class DataManager(object):
         print('--> Reading all NIfTI objects (imaging volumes & masks) to create MEDscan classes')
         list_instances = []
         for file in tqdm(self.__nifti.stack_path_images):
-            # Assert the list of instances does not exceed the a size of 10
-            if len(list_instances) >= 10:
-                print('The number of MEDscan instances exceeds 10, please consider saving the instances')
-                break
-            # INITIALIZE MEDscan INSTANCE AND UPDATE ATTRIBUTES
-            medscan = MEDscan()
-            medscan.patientID = os.path.basename(file).split("_")[0]
-            medscan.type = os.path.basename(file).split(".")[-3]
-            medscan.series_description = file.name[file.name.find('__') + 2: file.name.find('(')] if '__' in file.name else ""
-            medscan.format = "nifti"
-            medscan.data.set_orientation(orientation="Axial")
-            medscan.data.set_patient_position(patient_position="HFS")
-            medscan.data.volume.array = nib.load(file).get_fdata()
-            
-            # RAS to LPS
-            #medscan.data.volume.convert_to_LPS()
-            medscan.data.volume.scan_rot = None
-            
-            # Update spatialRef
-            medscan = self.__associate_spatialRef(file, medscan)
-            
-            # Get ROI
-            medscan = self.__associate_roi_to_image(file, medscan, nib.load(file))
+            try:
+                # Assert the list of instances does not exceed the a size of 10
+                if len(list_instances) >= 10:
+                    print('The number of MEDscan instances exceeds 10, please consider saving the instances')
+                    break
+                # INITIALIZE MEDscan INSTANCE AND UPDATE ATTRIBUTES
+                medscan = MEDscan()
+                medscan.patientID = os.path.basename(file).split("_")[0]
+                medscan.type = os.path.basename(file).split(".")[-3]
+                medscan.series_description = file.name[file.name.find('__') + 2: file.name.find('(')] if '__' in file.name else ""
+                medscan.format = "nifti"
+                medscan.data.set_orientation(orientation="Axial")
+                medscan.data.set_patient_position(patient_position="HFS")
+                medscan.data.volume.array = nib.load(file).get_fdata()
+                
+                # RAS to LPS
+                #medscan.data.volume.convert_to_LPS()
+                medscan.data.volume.scan_rot = None
+                
+                # Update spatialRef
+                medscan = self.__associate_spatialRef(file, medscan)
+                
+                # Get ROI
+                medscan = self.__associate_roi_to_image(file, medscan, nib.load(file))
 
-            # SAVE MEDscan INSTANCE
-            if self.save and self.paths._path_save:
-                save_MEDscan(medscan, self.paths._path_save)
-            else:
-                list_instances.append(medscan)
-            
-            # Update the path to the created instances
-            name_save = self.__get_MEDscan_name_save(medscan)
+                # SAVE MEDscan INSTANCE
+                if self.save and self.paths._path_save:
+                    save_MEDscan(medscan, self.paths._path_save)
+                else:
+                    list_instances.append(medscan)
+                
+                # Update the path to the created instances
+                name_save = self.__get_MEDscan_name_save(medscan)
 
-            # Clear memory
-            del medscan
+                # Clear memory
+                del medscan
 
-            # Update the path to the created instances
-            if self.paths._path_save:
-                self.path_to_objects.append(str(self.paths._path_save / name_save))
-            
-            # Update processing summary
-            if name_save.split('_')[0].count('-') >= 2:
-                scan_type = name_save[name_save.find('__')+2 : name_save.find('.')]
-                if name_save.split('-')[0] not in self.__studies:
-                    self.__studies.append(name_save.split('-')[0])  # add new study
-                if name_save.split('-')[1] not in self.__institutions:
-                    self.__institutions.append(name_save.split('-')[1])  # add new institution
-                if name_save.split('-')[0] not in self.summary:
-                    self.summary[name_save.split('-')[0]] = {}  # add new study to summary
-                if name_save.split('-')[1] not  in self.summary[name_save.split('-')[0]]:
-                    self.summary[name_save.split('-')[0]][name_save.split('-')[1]] = {}  # add new institution
-                if scan_type not in self.__scans:
-                    self.__scans.append(scan_type)
-                if scan_type not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]]:
-                    self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type] = []
-                if name_save not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type]:
-                    self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
-            else:
-                if self.save:
-                    logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
-                        "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
+                # Update the path to the created instances
+                if self.paths._path_save:
+                    self.path_to_objects.append(str(self.paths._path_save / name_save))
+                
+                # Update processing summary
+                if name_save.split('_')[0].count('-') >= 2:
+                    scan_type = name_save[name_save.find('__')+2 : name_save.find('.')]
+                    if name_save.split('-')[0] not in self.__studies:
+                        self.__studies.append(name_save.split('-')[0])  # add new study
+                    if name_save.split('-')[1] not in self.__institutions:
+                        self.__institutions.append(name_save.split('-')[1])  # add new institution
+                    if name_save.split('-')[0] not in self.summary:
+                        self.summary[name_save.split('-')[0]] = {}  # add new study to summary
+                    if name_save.split('-')[1] not  in self.summary[name_save.split('-')[0]]:
+                        self.summary[name_save.split('-')[0]][name_save.split('-')[1]] = {}  # add new institution
+                    if scan_type not in self.__scans:
+                        self.__scans.append(scan_type)
+                    if scan_type not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]]:
+                        self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type] = []
+                    if name_save not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type]:
+                        self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
+                else:
+                    if self.save:
+                        logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
+                            "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
+            except Exception as e:
+                print(f'Error while processing: {file}, error: {e}\n')
         print('DONE')
 
         if list_instances:
