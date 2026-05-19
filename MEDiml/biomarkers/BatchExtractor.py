@@ -16,6 +16,7 @@ import ray
 from tqdm import trange
 
 import MEDiml
+from MEDiml.wrangling.DataManager import DataManager
 
 
 class BatchExtractor(object):
@@ -30,6 +31,7 @@ class BatchExtractor(object):
             path_params: Union[str, Path],
             path_save: Union[str, Path],
             n_batch: int = 4,
+            use_niftis: bool = False,
             skip_existing: bool = False
     ) -> None:
         """
@@ -42,6 +44,7 @@ class BatchExtractor(object):
         self.roi_types = []
         self.roi_type_labels = []
         self.n_bacth = n_batch
+        self.use_niftis = use_niftis
         self.skip_existing = skip_existing
 
     def __load_and_process_params(self) -> Dict:
@@ -59,7 +62,9 @@ class BatchExtractor(object):
     @ray.remote
     def __compute_radiomics_one_patient(
             self,
-            name_patient: str,
+            patient_id: str,
+            modality: str,
+            sequence: str,
             roi_name: str,
             im_params: Dict,
             roi_type: str,
@@ -70,8 +75,9 @@ class BatchExtractor(object):
         Computes all radiomics features (Texture & Non-texture) for one patient/scan
 
         Args:
-            name_patient(str): scan or patient full name. It has to respect the MEDiml naming convention:
-                PatientID__ImagingScanName.ImagingModality.npy
+            patient_id(str): ID of the patient.
+            modality(str): Modality of the scan (CT, MR, PT).
+            sequence(str): Name of the scan sequence (e.g., T1, T2, FLAIR for MR scans).
             roi_name(str): name of the ROI that will  be used in computation.
             im_params(Dict): Dict of parameters/settings that will be used in the processing and computation.
             roi_type(str): Type of ROI used in the processing and computation (for identification purposes)
@@ -86,26 +92,49 @@ class BatchExtractor(object):
 
         # Check if features are already computed for the current scan
         if self.skip_existing:
-            modality = name_patient.split('.')[1]
-            name_save = name_patient.split('.')[0] + f'({roi_type_label})' + f'.{modality}.json'
+            name_save = patient_id + '__' + sequence + f'({roi_type_label})' + f'.{modality}.json'
             if Path(self._path_save / f'features({roi_type})' / name_save).exists():
-                logging.info("Skipping existing features for scan: {name_patient}")
+                logging.info("Skipping existing features for scan: {patient_id}")
                 return log_file
 
         # start timer
         t_start = time()
 
         # Initialization
-        message = f"\n***************** COMPUTING FEATURES: {name_patient} *****************"
+        message = f"\n***************** COMPUTING FEATURES: {patient_id} *****************"
         logging.info(message)
 
-        # Load MEDscan instance
-        try:
-            with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
-            medscan = MEDiml.MEDscan(medscan)
-        except Exception as e:
-            print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
-            return None
+        # Load nifti files if the option is selected.
+        medscan = None
+        if self.use_niftis:
+            try:
+                name_patient = patient_id + '__' + sequence + f'{roi_name.replace("{", "(").replace("}", ")")}'
+                all_niftis = [file for file in self._path_read.rglob(f"{name_patient}*.nii*")]
+                if len(all_niftis) == 0:
+                    logging.error(f"No NIfTI files found for {name_patient} in {self._path_read}.")
+                    return log_file
+                nifti_scan_path = [file for file in all_niftis if file.name.endswith(f".{modality}.nii.gz") or file.name.endswith(f".{modality}.nii")][0]
+                nifti_roi_path = [file for file in all_niftis if file.name.endswith(f".ROI.nii.gz") or file.name.endswith(f".ROI.nii")][0]
+                if nifti_scan_path.exists() and nifti_roi_path.exists():
+                        dm = DataManager()
+                        medscan = dm.process_one_nifti(nifti_scan_path, nifti_roi_path)
+                else:
+                    logging.error(f"NIfTI files not found for {name_patient}. Expected paths: {nifti_scan_path}, {nifti_roi_path}")
+                    return log_file
+            except Exception as e:
+                logging.error(f"Error loading NIfTI files for {patient_id}: {e}")
+                return log_file
+        else:
+            # Load MEDscan instance
+            try:
+                name_patient = patient_id + '__' + sequence + '.' + modality + '.npy'
+                with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
+                medscan = MEDiml.MEDscan(medscan)
+            except Exception as e:
+                print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
+                return log_file
+
+        if medscan is None: return log_file
 
         # Init processing & computation parameters
         medscan.init_params(im_params)
@@ -489,6 +518,8 @@ class BatchExtractor(object):
                         path_save=self._path_save,
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
+                        used_niftis=self.use_niftis,
+                        modality=modality
                     )
         
         logging.info(f"TOTAL TIME:{time() - t_start} seconds\n\n")
@@ -591,8 +622,12 @@ class BatchExtractor(object):
             roi_type_label = self.roi_type_labels[r]
             print(f'\n --> Computing features for the "{roi_type_label}" roi type ...', end = '')
 
+            # Check if the CSV file exists
+            if not self._path_csv.exists():
+                raise FileNotFoundError(f'CSV file not found at path: {self._path_csv}. Please check the path and try again.')
+
             # READING CSV EXPERIMENT TABLE
-            tabel_roi = pd.read_csv(self._path_csv / ('roiNames_' + roi_type_label + '.csv'))
+            tabel_roi = pd.read_csv(self._path_csv)
 
             # Check if all the requires columns are present
             for col in ['PatientID', 'ImagingScanName', 'ImagingModality', 'ROIname']:
@@ -600,18 +635,21 @@ class BatchExtractor(object):
                     raise ValueError(f'Missing column "{col}" in the ROI CSV file for roi type "{roi_type_label}". \
                         Please check that the CSV file contains all the required columns: "PatientID", "ImagingScanName", " \
                         "ImagingModality" and "ROIname".')
+            
+            # Filter out patients not present in the read path
+            if self.use_niftis:
+                all_files = list(self._path_read.rglob('*.nii*'))
+            else:
+                all_files = list(self._path_read.rglob('*.npy'))
+            tabel_roi = tabel_roi[tabel_roi.apply(
+                lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files), 
+                axis=1
+            )]
 
-            tabel_roi['under'] = '_'
-            tabel_roi['dot'] = '.'
-            tabel_roi['npy'] = '.npy'
-            name_patients = (pd.Series(
-                tabel_roi[['PatientID', 'under', 'under',
-                        'ImagingScanName',
-                        'dot',
-                        'ImagingModality',
-                        'npy']].fillna('').values.tolist()).str.join('')).tolist()
-            tabel_roi = tabel_roi.drop(columns=['under', 'under', 'dot', 'npy'])
-            roi_names = tabel_roi.ROIname.tolist()
+            patient_ids = tabel_roi['PatientID'].tolist()
+            modalities = tabel_roi['ImagingModality'].tolist()
+            sequences = tabel_roi['ImagingScanName'].tolist()
+            roi_names = tabel_roi['ROIname'].tolist()
 
             # INITIALIZATION
             os.chdir(self._path_save)
@@ -636,7 +674,7 @@ class BatchExtractor(object):
             path_batch = Path.cwd() / name_bacth_log
 
             # PRODUCE BATCH COMPUTATIONS
-            n_patients = len(name_patients)
+            n_patients = len(patient_ids)
             n_batch = self.n_bacth
             if n_batch is None or n_batch < 0:
                 n_batch = 1
@@ -649,7 +687,9 @@ class BatchExtractor(object):
             # Distribute the first tasks to all workers
             ids = [self.__compute_radiomics_one_patient.remote(
                         self,
-                        name_patient=name_patients[i],
+                        patient_id=patient_ids[i],
+                        modality=modalities[i],
+                        sequence=sequences[i],
                         roi_name=roi_names[i], 
                         im_params=im_params,
                         roi_type=roi_type,
@@ -662,12 +702,15 @@ class BatchExtractor(object):
             for _ in trange(n_patients):
                 ready, not_ready = ray.wait(ids, num_returns=1)
                 ids = not_ready
+                test = ray.get(ready)
                 log_file = ray.get(ready)[0]
                 if nb_job_left > 0:
                     idx = n_patients - nb_job_left
                     ids.extend([self.__compute_radiomics_one_patient.remote(
                                     self,
-                                    name_patients[idx],
+                                    patient_ids[idx],
+                                    modalities[idx],
+                                    sequences[idx],
                                     roi_names[idx], 
                                     im_params,
                                     roi_type,

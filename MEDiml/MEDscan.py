@@ -586,9 +586,15 @@ class MEDscan(object):
             self.radiomics.image['texture']['ngldm_3D'][self.params.radiomics.processing_name] = ngldm_features
 
     def save_radiomics(
-                    self, scan_file_name: List, 
-                    path_save: Path, roi_type: str, 
-                    roi_type_label: str, patient_num: int = None) -> None:
+        self, 
+        scan_file_name: List, 
+        path_save: Path, 
+        roi_type: str, 
+        roi_type_label: str, 
+        patient_num: int = None,
+        used_niftis: bool = False,
+        modality: str = None
+    ) -> None:
         """
         Saves extracted radiomics features in a JSON file.
 
@@ -598,7 +604,8 @@ class MEDscan(object):
             roi_type(str): Type of the ROI.
             roi_type_label(str): Label of the ROI type.
             patient_num(int): Index of scan.
-        
+            used_niftis(bool): Whether the radiomics extraction was directly performed on NIfTI files.
+            modality(str): Modality of the scan, required if `used_niftis` is True.
         Returns:
             None.
         """
@@ -619,20 +626,25 @@ class MEDscan(object):
                                 self.data.volume.spatialRef.PixelExtentInWorldZ
                                 ])
         self.radiomics.update_params(params)
-        if type(scan_file_name) is str:
-            index_dot = scan_file_name.find('.')
-            ext = scan_file_name.find('.npy')
-            name_save = scan_file_name[:index_dot] + \
-                        '(' + roi_type_label + ')' + \
-                        scan_file_name[index_dot : ext]
-        elif patient_num is not None:
-            index_dot = scan_file_name[patient_num].find('.')
-            ext = scan_file_name[patient_num].find('.npy')
-            name_save = scan_file_name[patient_num][:index_dot] + \
-                        '(' + roi_type_label + ')' + \
-                        scan_file_name[patient_num][index_dot : ext]
+        if used_niftis:
+            index_op_parenthesis = scan_file_name.find('(')
+            index_cl_parenthesis = scan_file_name.find(')')
+            name_save = scan_file_name[:index_op_parenthesis+1] + roi_type_label + scan_file_name[index_cl_parenthesis:] + '.' + modality
         else:
-            raise ValueError("`patient_num` must be specified or `scan_file_name` must be str")
+            if type(scan_file_name) is str:
+                index_dot = scan_file_name.find('.')
+                ext = scan_file_name.find('.npy')
+                name_save = scan_file_name[:index_dot] + \
+                            '(' + roi_type_label + ')' + \
+                            scan_file_name[index_dot : ext]
+            elif patient_num is not None:
+                index_dot = scan_file_name[patient_num].find('.')
+                ext = scan_file_name[patient_num].find('.npy')
+                name_save = scan_file_name[patient_num][:index_dot] + \
+                            '(' + roi_type_label + ')' + \
+                            scan_file_name[patient_num][index_dot : ext]
+            else:
+                raise ValueError("`patient_num` must be specified or `scan_file_name` must be str")
 
         with open(path_save / f"{name_save}.json", "w") as fp:   
             dump(self.radiomics.to_json(), fp, indent=4, cls=NumpyEncoder)
