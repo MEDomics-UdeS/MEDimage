@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mediml"
-version = "0.11.1"
+version = "0.12.0"
 description = "MEDiml is a Python package for processing and extracting features from medical images"
 authors = ["MEDomics Consortium <medomics.info@gmail.com>"]
 license = "GPL-3.0"
