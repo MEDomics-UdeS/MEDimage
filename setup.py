@@ -38,5 +38,10 @@ setup(
     keywords='radiomics cancer imaging medical research computational imaging',
     python_requires='>=3.8,<=3.10',
     packages=find_packages(exclude=['docs', 'tests']),
-    install_requires=requirements
+    install_requires=requirements,
+    entry_points={
+        'console_scripts': [
+            'radiomics-nii=radiomics_nii:main',
+        ],
+    },
 )

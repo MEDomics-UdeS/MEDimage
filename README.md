@@ -43,6 +43,15 @@ pip install MEDiml
 
 For more installation options (Conda, Poetry...) check out the [installation documentation](https://mediml.readthedocs.io/en/latest/Installation.html).
 
+### Radiomics command line for NIfTI files
+After installation, you can launch NIfTI radiomics extraction directly from the terminal:
+
+```bash
+radiomics-nii <path/to/input> <path/to/csv_file> <path/to/settings_file> <path/save> --n-batch 4 --skip-existing
+```
+
+The command wraps the existing `BatchExtractor` workflow and runs it in NIfTI mode.
+
 ## 3. Generating the documentation locally
 The [documentation](https://mediml.readthedocs.io/en/latest/) of the MEDiml package was created using Sphinx. However, you can generate and host it locally by compiling the documentation source code using :
 
