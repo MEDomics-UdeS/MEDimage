@@ -112,7 +112,7 @@ def sig_proc_segmentise(x: List) -> List:
                                 "j":    ind_0_end,
                                 "val":  np.zeros(np.shape(ind_0_start)[0])})
 
-    df_segm = df_one.append(df_zero).sort_values(by="i").reset_index(drop=True)
+    df_segm = pd.concat([df_one, df_zero]).sort_values(by="i").reset_index(drop=True)
 
     return df_segm
 
