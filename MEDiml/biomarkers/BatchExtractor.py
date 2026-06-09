@@ -30,6 +30,8 @@ class BatchExtractor(object):
             path_csv: Union[str, Path],
             path_params: Union[str, Path],
             path_save: Union[str, Path],
+            pred_doses_csv: Union[str, Path] = None,
+            presc_dose_column: str = None,
             n_batch: int = 4,
             use_niftis: bool = False,
             skip_existing: bool = False
@@ -41,6 +43,8 @@ class BatchExtractor(object):
         self._path_params = Path(path_params)
         self._path_read = Path(path_read)
         self._path_save = Path(path_save)
+        self._pred_doses_csv = Path(pred_doses_csv) if pred_doses_csv else None
+        self.presc_dose_column = presc_dose_column
         self.roi_types = []
         self.roi_type_labels = []
         self.n_bacth = n_batch
@@ -69,7 +73,8 @@ class BatchExtractor(object):
             im_params: Dict,
             roi_type: str,
             roi_type_label: str,
-            log_file: Union[Path, str]
+            log_file: Union[Path, str],
+            presc_dose: float = None
         ) -> str:
         """
         Computes all radiomics features (Texture & Non-texture) for one patient/scan
@@ -83,6 +88,7 @@ class BatchExtractor(object):
             roi_type(str): Type of ROI used in the processing and computation (for identification purposes)
             roi_type_label(str): Label of the ROI used, to make it identifiable from other ROIs.
             log_file(Union[Path, str]): Path to the logging file.
+            presc_dose(float, optional): Prescription dose in Gy, required for dose features extraction if enabled. Defaults to None.
 
         Returns:
             Union[Path, str]: Path to the updated logging file.
@@ -277,6 +283,23 @@ class BatchExtractor(object):
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF STATISTICAL FEATURES {e}')
             stats = None
+
+        # Dose features extraction
+        dose_features = None
+        try:
+            if medscan.params.radiomics.extract['Dose']:
+                if presc_dose is None:
+                    logging.warning('Dose features are enabled but no rx_dose was provided; skipping dose extraction.')
+                else:
+                    dose_features = MEDiml.biomarkers.dosiomics.extract_all(
+                        volume=vol_obj.data,
+                        vox_dim=medscan.params.process.scale_non_text,
+                        presc_dose=presc_dose,
+                        mask=roi_obj_int.data
+                    )
+        except Exception as e:
+            logging.error(f'PROBLEM WITH COMPUTATION OF DOSE FEATURES {e}')
+            dose_features = None
 
         # Intensity histogram equalization of the imaging volume
         vol_quant_re, _ = MEDiml.processing.discretize(
@@ -501,6 +524,7 @@ class BatchExtractor(object):
                                 loc_int_features=local_intensity, 
                                 stats_features=stats, 
                                 int_hist_features=int_hist,
+                                dose_features=dose_features,
                                 glcm_features=glcm, 
                                 glrlm_features=glrlm, 
                                 glszm_features=glszm, 
@@ -651,7 +675,20 @@ class BatchExtractor(object):
             sequences = tabel_roi['ImagingScanName'].tolist()
             roi_names = tabel_roi['ROIname'].tolist()
 
-            # INITIALIZATION
+            # Read dose information if dose features extraction is enabled
+            presc_doses = None
+            if self._pred_doses_csv and self._pred_doses_csv.exists():
+                presc_doses = pd.read_csv(self._pred_doses_csv)
+                if self.presc_dose_column and self.presc_dose_column in presc_doses.columns:
+                    presc_doses = presc_doses[presc_doses['PatientID'].isin(patient_ids)]
+                    presc_doses = dict(zip(presc_doses['PatientID'], presc_doses[self.presc_dose_column]))
+                    presc_doses = {p: presc_doses.get(p, None) for p in patient_ids}
+            else:
+                logging.warning('Dose features extraction is enabled but "PrescriptionDose" column is missing in the CSV file. Dose features will be skipped.')
+
+            # Initialization
+            if not self._path_save.exists():
+                os.makedirs(self._path_save, 0o777, True)
             os.chdir(self._path_save)
             name_bacth_log = 'batchLog_' + roi_type_label
             p = Path.cwd().glob('*')
@@ -661,8 +698,7 @@ class BatchExtractor(object):
             if exist_file and (n_files > 0):
                 for i in range(0, n_files):
                     if (files[i].name == name_bacth_log):
-                        mod_timestamp = datetime.fromtimestamp(
-                            Path(files[i]).stat().st_mtime)
+                        mod_timestamp = datetime.fromtimestamp(Path(files[i]).stat().st_mtime)
                         date = mod_timestamp.strftime("%d-%b-%Y_%HH%MM%SS")
                         new_name = name_bacth_log+'_'+date
                         if sys.platform == 'win32':
@@ -694,7 +730,8 @@ class BatchExtractor(object):
                         im_params=im_params,
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
-                        log_file=log_files[i])
+                        log_file=log_files[i],
+                        presc_dose=presc_doses[patient_ids[i]] if presc_doses is not None else None)
             for i in range(n_batch)]
 
             # Distribute the remaining tasks
@@ -702,7 +739,6 @@ class BatchExtractor(object):
             for _ in trange(n_patients):
                 ready, not_ready = ray.wait(ids, num_returns=1)
                 ids = not_ready
-                test = ray.get(ready)
                 log_file = ray.get(ready)[0]
                 if nb_job_left > 0:
                     idx = n_patients - nb_job_left
@@ -715,7 +751,8 @@ class BatchExtractor(object):
                                     im_params,
                                     roi_type,
                                     roi_type_label,
-                                    log_file)
+                                    log_file,
+                                    presc_dose=presc_doses[patient_ids[idx]] if presc_doses is not None else None)
                                 ])
                     nb_job_left -= 1
 
