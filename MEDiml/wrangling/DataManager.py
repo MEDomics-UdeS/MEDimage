@@ -348,7 +348,8 @@ class DataManager(object):
 
         nb_job_left = n_scans - n_batch
 
-        return ray.get(ids) if not self.save else None
+        if not self.save:
+            return ray.get(ids)
 
         # Distribute the remaining tasks
         for _ in trange(n_scans):
