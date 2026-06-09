@@ -51,6 +51,10 @@ def initialize_features_names(image_space_struct: Dict) -> Tuple[List, List]:
 
     for t in range(0, n_text_type):
         dic_image_space_struct_text = image_space_struct['texture'][text_cell[0][t]]
+        if len(dic_image_space_struct_text.keys()) == 0:
+            text_cell[1][t] = []
+            text_cell[2][t] = []
+            continue
         field_params_text = [key for key in dic_image_space_struct_text.keys()]
         dic_image_space_struct_params_text = image_space_struct['texture'][text_cell[0]
                                                                        [t]][field_params_text[0]]
