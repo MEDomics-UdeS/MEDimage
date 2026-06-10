@@ -644,6 +644,34 @@ class DataManager(object):
         if list_instances:
             return list_instances
 
+    def process_one_dicom(self) -> MEDscan:
+        """Processes one DICOM file to create a MEDscan class instance.
+
+        Args:
+            path_image (Union[Path, str]): Path to the DICOM image data.
+            path_mask (Union[Path, str]): Path to the DICOM mask data.
+        
+        Returns:
+            MEDscan: MEDscan class instance.
+        """
+        self.__read_all_dicoms()
+
+        # Ensure only one image and one mask are given
+        if len(self.__dicom.cell_path_images) > 1 or len(self.__dicom.cell_path_rs) > 1:
+            raise ValueError("More than one image or mask found, please make sure the folder provided contains a single scan.")
+
+        medscan = ProcessDICOM(
+            self.__dicom.cell_path_images[0],
+            self.__dicom.cell_path_rs[0],
+            save=False
+        ).process_files()
+
+        # SAVE MEDscan INSTANCE
+        if self.save and self.paths._path_save:
+            save_MEDscan(medscan, self.paths._path_save)
+
+        return medscan
+
     def process_one_nifti(self, path_image: Union[Path, str], path_mask: Union[Path, str]) -> MEDscan:
         """Processes one NIfTI file to create a MEDscan class instance.
 

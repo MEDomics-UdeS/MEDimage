@@ -25,23 +25,38 @@ class BatchExtractor(object):
     """
 
     def __init__(
-            self, 
-            path_read: Union[str, Path],
+            self,
             path_csv: Union[str, Path],
             path_params: Union[str, Path],
             path_save: Union[str, Path],
+            path_npy: Union[str, Path] = None,
+            path_dicoms: Union[str, Path] = None,
+            path_niftis: Union[str, Path] = None,
             pred_doses_csv: Union[str, Path] = None,
             presc_dose_column: str = None,
             n_batch: int = 4,
             use_niftis: bool = False,
+            use_dicoms: bool = False,
             skip_existing: bool = False
     ) -> None:
         """
         constructor of the BatchExtractor class 
         """
+
+        assert not (use_niftis and use_dicoms), "Please select either NIfTI files or DICOM files "
+        "for processing, not both."
+
+        if use_niftis and path_niftis is None:
+            raise ValueError("If use_niftis is True, please provide a path to the NIfTI files.")
+
+        if use_dicoms and path_dicoms is None:
+            raise ValueError("If use_dicoms is True, please provide a path to the DICOM files.")
+
         self._path_csv = Path(path_csv)
         self._path_params = Path(path_params)
-        self._path_read = Path(path_read)
+        self._path_npy = Path(path_npy) if path_npy else None
+        self._path_dicoms = Path(path_dicoms) if path_dicoms else None
+        self._path_niftis = Path(path_niftis) if path_niftis else None
         self._path_save = Path(path_save)
         self._pred_doses_csv = Path(pred_doses_csv) if pred_doses_csv else None
         self.presc_dose_column = presc_dose_column
@@ -49,6 +64,7 @@ class BatchExtractor(object):
         self.roi_type_labels = []
         self.n_bacth = n_batch
         self.use_niftis = use_niftis
+        self.use_dicoms = use_dicoms
         self.skip_existing = skip_existing
 
     def __load_and_process_params(self) -> Dict:
@@ -115,26 +131,39 @@ class BatchExtractor(object):
         if self.use_niftis:
             try:
                 name_patient = patient_id + '__' + sequence + f'{roi_name.replace("{", "(").replace("}", ")")}'
-                all_niftis = [file for file in self._path_read.rglob(f"{name_patient}*.nii*")]
+                all_niftis = [file for file in self._path_niftis.rglob(f"{name_patient}*.nii*")]
                 if len(all_niftis) == 0:
-                    logging.error(f"No NIfTI files found for {name_patient} in {self._path_read}.")
+                    logging.error(f"No NIfTI files found for {name_patient} in {self._path_niftis}.")
                     return log_file
                 nifti_scan_path = [file for file in all_niftis if file.name.endswith(f".{modality}.nii.gz") or file.name.endswith(f".{modality}.nii")][0]
                 nifti_roi_path = [file for file in all_niftis if file.name.endswith(f".ROI.nii.gz") or file.name.endswith(f".ROI.nii")][0]
                 if nifti_scan_path.exists() and nifti_roi_path.exists():
-                        dm = DataManager()
-                        medscan = dm.process_one_nifti(nifti_scan_path, nifti_roi_path)
+                    dm = DataManager()
+                    medscan = dm.process_one_nifti(nifti_scan_path, nifti_roi_path)
                 else:
                     logging.error(f"NIfTI files not found for {name_patient}. Expected paths: {nifti_scan_path}, {nifti_roi_path}")
                     return log_file
             except Exception as e:
                 logging.error(f"Error loading NIfTI files for {patient_id}: {e}")
                 return log_file
+        elif self.use_dicoms:
+            try:
+                name_patient = patient_id + '__' + sequence + f'{roi_name.replace("{", "(").replace("}", ")")}'
+                dicom_scan_path = self._path_dicoms / patient_id / sequence
+                if dicom_scan_path.exists():
+                    dm = DataManager(path_to_dicoms=dicom_scan_path)
+                    medscan = dm.process_one_dicom()
+                else:
+                    logging.error(f"DICOM directory not found for {name_patient} in {self._path_dicoms}. Expected path: {dicom_scan_path}")
+                    return log_file
+            except Exception as e:
+                logging.error(f"Error loading DICOM files for {patient_id}: {e}")
+                return log_file
         else:
             # Load MEDscan instance
             try:
                 name_patient = patient_id + '__' + sequence + '.' + modality + '.npy'
-                with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
+                with open(self._path_npy / name_patient, 'rb') as f: medscan = pickle.load(f)
                 medscan = MEDiml.MEDscan(medscan)
             except Exception as e:
                 print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
@@ -543,6 +572,7 @@ class BatchExtractor(object):
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
                         used_niftis=self.use_niftis,
+                        used_dicoms=self.use_dicoms,
                         modality=modality
                     )
         
@@ -659,16 +689,21 @@ class BatchExtractor(object):
                     raise ValueError(f'Missing column "{col}" in the ROI CSV file for roi type "{roi_type_label}". \
                         Please check that the CSV file contains all the required columns: "PatientID", "ImagingScanName", " \
                         "ImagingModality" and "ROIname".')
-            
+
             # Filter out patients not present in the read path
             if self.use_niftis:
-                all_files = list(self._path_read.rglob('*.nii*'))
+                all_files = list(self._path_niftis.rglob('*.nii*'))
+                condition = lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files)
+            elif self.use_dicoms:
+                condition = lambda x: (self._path_dicoms / f"{x['PatientID']}/{x['ImagingScanName']}").exists()
             else:
-                all_files = list(self._path_read.rglob('*.npy'))
-            tabel_roi = tabel_roi[tabel_roi.apply(
-                lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files), 
-                axis=1
-            )]
+                all_files = list(self._path_npy.rglob('*.npy'))
+                condition = lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files)
+            tabel_roi = tabel_roi[tabel_roi.apply(condition, axis=1)]
+
+            # Check if the table is not empty
+            if tabel_roi.empty:
+                raise ValueError(f'No valid scan files found for roi type "{roi_type_label}".')
 
             patient_ids = tabel_roi['PatientID'].tolist()
             modalities = tabel_roi['ImagingModality'].tolist()
@@ -684,7 +719,8 @@ class BatchExtractor(object):
                     presc_doses = dict(zip(presc_doses['PatientID'], presc_doses[self.presc_dose_column]))
                     presc_doses = {p: presc_doses.get(p, None) for p in patient_ids}
             else:
-                logging.warning('Dose features extraction is enabled but "PrescriptionDose" column is missing in the CSV file. Dose features will be skipped.')
+                logging.warning('Dose features extraction is enabled but "PrescriptionDose" column is missing'
+                ' in the CSV file. Dose features will be skipped.')
 
             # Initialization
             if not self._path_save.exists():

@@ -231,10 +231,6 @@ class MEDscan(object):
             if feature not in self.params.radiomics.extract:
                 self.params.radiomics.extract[feature] = True
 
-        # Dose features are only valid for dose series.
-        if str(self.series_description).strip().lower() != "dose":
-            self.params.radiomics.extract.pop("Dose", None)
-
     def __init_filter_params(self, filter_params: Dict) -> None:
         """Initializes the filtering params from a given Dict.
 
@@ -611,6 +607,7 @@ class MEDscan(object):
         roi_type_label: str, 
         patient_num: int = None,
         used_niftis: bool = False,
+        used_dicoms: bool = False,
         modality: str = None
     ) -> None:
         """
@@ -623,6 +620,7 @@ class MEDscan(object):
             roi_type_label(str): Label of the ROI type.
             patient_num(int): Index of scan.
             used_niftis(bool): Whether the radiomics extraction was directly performed on NIfTI files.
+            used_dicoms(bool): Whether the radiomics extraction was directly performed on DICOM files.
             modality(str): Modality of the scan, required if `used_niftis` is True.
         Returns:
             None.
@@ -644,7 +642,7 @@ class MEDscan(object):
                                 self.data.volume.spatialRef.PixelExtentInWorldZ
                                 ])
         self.radiomics.update_params(params)
-        if used_niftis:
+        if used_niftis or used_dicoms:
             index_op_parenthesis = scan_file_name.find('(')
             index_cl_parenthesis = scan_file_name.find(')')
             name_save = scan_file_name[:index_op_parenthesis+1] + roi_type_label + scan_file_name[index_cl_parenthesis:] + '.' + modality
