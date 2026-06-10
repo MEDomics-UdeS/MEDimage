@@ -218,7 +218,7 @@ class MEDscan(object):
         # Features to extract
         features = [
             "Morph", "LocalIntensity", "Stats", "IntensityHistogram", "IntensityVolumeHistogram", 
-            "GLCM", "GLRLM", "GLSZM", "GLDZM", "NGTDM", "NGLDM"
+            "GLCM", "GLRLM", "GLSZM", "GLDZM", "NGTDM", "NGLDM", "Dose"
         ]
         if "extract" in im_params.keys():
             self.params.radiomics.extract = im_params['extract']
@@ -400,6 +400,11 @@ class MEDscan(object):
                 'intVolHist_3D': {self.params.radiomics.ivh_name: {}} 
             })
 
+            if self.params.radiomics.extract.get('Dose', False):
+                self.radiomics.image.update({
+                    'dose_3D': {self.params.radiomics.scale_name: {}}
+                })
+
         except Exception as e:
             message = f"\n PROBLEM WITH PRE-PROCESSING OF FEATURES IN init_ntf_calculation(): \n {e}"
             logging.error(message)
@@ -494,6 +499,10 @@ class MEDscan(object):
             setattr(self.params.radiomics, 'processing_name', processing_name)
         else:
             self.params.radiomics.processing_name = processing_name
+        
+        # Update features dict
+        for feat in list(self.radiomics.image['texture'].keys()):
+            self.radiomics.image['texture'][feat].update({processing_name: {}})
 
     def init_from_nifti(self, nifti_image_path: Path) -> None:
         """Initializes the MEDscan class using a NIfTI file.
@@ -521,6 +530,7 @@ class MEDscan(object):
                         self, int_vol_hist_features: Dict = {}, 
                         morph_features: Dict = {}, loc_int_features: Dict = {}, 
                         stats_features: Dict = {}, int_hist_features: Dict = {},
+                        dose_features: Dict = {},
                         glcm_features: Dict = {}, glrlm_features: Dict = {},
                         glszm_features: Dict = {}, gldzm_features: Dict = {}, 
                         ngtdm_features: Dict = {}, ngldm_features: Dict = {}) -> None:
@@ -568,6 +578,10 @@ class MEDscan(object):
             self.radiomics.image['stats_3D'][self.params.radiomics.scale_name] = stats_features
         if int_hist_features:
             self.radiomics.image['intHist_3D'][self.params.radiomics.ih_name] = int_hist_features
+        if dose_features:
+            if 'dose_3D' not in self.radiomics.image:
+                self.radiomics.image['dose_3D'] = {self.params.radiomics.scale_name: {}}
+            self.radiomics.image['dose_3D'][self.params.radiomics.scale_name] = dose_features
         
         # Texture Features
         if glcm_features:
@@ -593,6 +607,7 @@ class MEDscan(object):
         roi_type_label: str, 
         patient_num: int = None,
         used_niftis: bool = False,
+        used_dicoms: bool = False,
         modality: str = None
     ) -> None:
         """
@@ -605,6 +620,7 @@ class MEDscan(object):
             roi_type_label(str): Label of the ROI type.
             patient_num(int): Index of scan.
             used_niftis(bool): Whether the radiomics extraction was directly performed on NIfTI files.
+            used_dicoms(bool): Whether the radiomics extraction was directly performed on DICOM files.
             modality(str): Modality of the scan, required if `used_niftis` is True.
         Returns:
             None.
@@ -626,7 +642,7 @@ class MEDscan(object):
                                 self.data.volume.spatialRef.PixelExtentInWorldZ
                                 ])
         self.radiomics.update_params(params)
-        if used_niftis:
+        if used_niftis or used_dicoms:
             index_op_parenthesis = scan_file_name.find('(')
             index_cl_parenthesis = scan_file_name.find(')')
             name_save = scan_file_name[:index_op_parenthesis+1] + roi_type_label + scan_file_name[index_cl_parenthesis:] + '.' + modality

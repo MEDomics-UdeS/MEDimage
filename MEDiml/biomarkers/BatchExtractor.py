@@ -25,26 +25,46 @@ class BatchExtractor(object):
     """
 
     def __init__(
-            self, 
-            path_read: Union[str, Path],
+            self,
             path_csv: Union[str, Path],
             path_params: Union[str, Path],
             path_save: Union[str, Path],
+            path_npy: Union[str, Path] = None,
+            path_dicoms: Union[str, Path] = None,
+            path_niftis: Union[str, Path] = None,
+            pred_doses_csv: Union[str, Path] = None,
+            presc_dose_column: str = None,
             n_batch: int = 4,
             use_niftis: bool = False,
+            use_dicoms: bool = False,
             skip_existing: bool = False
     ) -> None:
         """
         constructor of the BatchExtractor class 
         """
+
+        assert not (use_niftis and use_dicoms), "Please select either NIfTI files or DICOM files "
+        "for processing, not both."
+
+        if use_niftis and path_niftis is None:
+            raise ValueError("If use_niftis is True, please provide a path to the NIfTI files.")
+
+        if use_dicoms and path_dicoms is None:
+            raise ValueError("If use_dicoms is True, please provide a path to the DICOM files.")
+
         self._path_csv = Path(path_csv)
         self._path_params = Path(path_params)
-        self._path_read = Path(path_read)
+        self._path_npy = Path(path_npy) if path_npy else None
+        self._path_dicoms = Path(path_dicoms) if path_dicoms else None
+        self._path_niftis = Path(path_niftis) if path_niftis else None
         self._path_save = Path(path_save)
+        self._pred_doses_csv = Path(pred_doses_csv) if pred_doses_csv else None
+        self.presc_dose_column = presc_dose_column
         self.roi_types = []
         self.roi_type_labels = []
         self.n_bacth = n_batch
         self.use_niftis = use_niftis
+        self.use_dicoms = use_dicoms
         self.skip_existing = skip_existing
 
     def __load_and_process_params(self) -> Dict:
@@ -69,7 +89,8 @@ class BatchExtractor(object):
             im_params: Dict,
             roi_type: str,
             roi_type_label: str,
-            log_file: Union[Path, str]
+            log_file: Union[Path, str],
+            presc_dose: float = None
         ) -> str:
         """
         Computes all radiomics features (Texture & Non-texture) for one patient/scan
@@ -83,6 +104,7 @@ class BatchExtractor(object):
             roi_type(str): Type of ROI used in the processing and computation (for identification purposes)
             roi_type_label(str): Label of the ROI used, to make it identifiable from other ROIs.
             log_file(Union[Path, str]): Path to the logging file.
+            presc_dose(float, optional): Prescription dose in Gy, required for dose features extraction if enabled. Defaults to None.
 
         Returns:
             Union[Path, str]: Path to the updated logging file.
@@ -109,26 +131,39 @@ class BatchExtractor(object):
         if self.use_niftis:
             try:
                 name_patient = patient_id + '__' + sequence + f'{roi_name.replace("{", "(").replace("}", ")")}'
-                all_niftis = [file for file in self._path_read.rglob(f"{name_patient}*.nii*")]
+                all_niftis = [file for file in self._path_niftis.rglob(f"{name_patient}*.nii*")]
                 if len(all_niftis) == 0:
-                    logging.error(f"No NIfTI files found for {name_patient} in {self._path_read}.")
+                    logging.error(f"No NIfTI files found for {name_patient} in {self._path_niftis}.")
                     return log_file
                 nifti_scan_path = [file for file in all_niftis if file.name.endswith(f".{modality}.nii.gz") or file.name.endswith(f".{modality}.nii")][0]
                 nifti_roi_path = [file for file in all_niftis if file.name.endswith(f".ROI.nii.gz") or file.name.endswith(f".ROI.nii")][0]
                 if nifti_scan_path.exists() and nifti_roi_path.exists():
-                        dm = DataManager()
-                        medscan = dm.process_one_nifti(nifti_scan_path, nifti_roi_path)
+                    dm = DataManager()
+                    medscan = dm.process_one_nifti(nifti_scan_path, nifti_roi_path)
                 else:
                     logging.error(f"NIfTI files not found for {name_patient}. Expected paths: {nifti_scan_path}, {nifti_roi_path}")
                     return log_file
             except Exception as e:
                 logging.error(f"Error loading NIfTI files for {patient_id}: {e}")
                 return log_file
+        elif self.use_dicoms:
+            try:
+                name_patient = patient_id + '__' + sequence + f'{roi_name.replace("{", "(").replace("}", ")")}'
+                dicom_scan_path = self._path_dicoms / patient_id / sequence
+                if dicom_scan_path.exists():
+                    dm = DataManager(path_to_dicoms=dicom_scan_path)
+                    medscan = dm.process_one_dicom()
+                else:
+                    logging.error(f"DICOM directory not found for {name_patient} in {self._path_dicoms}. Expected path: {dicom_scan_path}")
+                    return log_file
+            except Exception as e:
+                logging.error(f"Error loading DICOM files for {patient_id}: {e}")
+                return log_file
         else:
             # Load MEDscan instance
             try:
                 name_patient = patient_id + '__' + sequence + '.' + modality + '.npy'
-                with open(self._path_read / name_patient, 'rb') as f: medscan = pickle.load(f)
+                with open(self._path_npy / name_patient, 'rb') as f: medscan = pickle.load(f)
                 medscan = MEDiml.MEDscan(medscan)
             except Exception as e:
                 print(f"\n ERROR LOADING PATIENT {name_patient}:\n {e}")
@@ -277,6 +312,23 @@ class BatchExtractor(object):
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF STATISTICAL FEATURES {e}')
             stats = None
+
+        # Dose features extraction
+        dose_features = None
+        try:
+            if medscan.params.radiomics.extract['Dose']:
+                if presc_dose is None:
+                    logging.warning('Dose features are enabled but no rx_dose was provided; skipping dose extraction.')
+                else:
+                    dose_features = MEDiml.biomarkers.dosiomics.extract_all(
+                        volume=vol_obj.data,
+                        vox_dim=medscan.params.process.scale_non_text,
+                        presc_dose=presc_dose,
+                        mask=roi_obj_int.data
+                    )
+        except Exception as e:
+            logging.error(f'PROBLEM WITH COMPUTATION OF DOSE FEATURES {e}')
+            dose_features = None
 
         # Intensity histogram equalization of the imaging volume
         vol_quant_re, _ = MEDiml.processing.discretize(
@@ -501,6 +553,7 @@ class BatchExtractor(object):
                                 loc_int_features=local_intensity, 
                                 stats_features=stats, 
                                 int_hist_features=int_hist,
+                                dose_features=dose_features,
                                 glcm_features=glcm, 
                                 glrlm_features=glrlm, 
                                 glszm_features=glszm, 
@@ -519,6 +572,7 @@ class BatchExtractor(object):
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
                         used_niftis=self.use_niftis,
+                        used_dicoms=self.use_dicoms,
                         modality=modality
                     )
         
@@ -635,23 +689,42 @@ class BatchExtractor(object):
                     raise ValueError(f'Missing column "{col}" in the ROI CSV file for roi type "{roi_type_label}". \
                         Please check that the CSV file contains all the required columns: "PatientID", "ImagingScanName", " \
                         "ImagingModality" and "ROIname".')
-            
+
             # Filter out patients not present in the read path
             if self.use_niftis:
-                all_files = list(self._path_read.rglob('*.nii*'))
+                all_files = list(self._path_niftis.rglob('*.nii*'))
+                condition = lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files)
+            elif self.use_dicoms:
+                condition = lambda x: (self._path_dicoms / f"{x['PatientID']}/{x['ImagingScanName']}").exists()
             else:
-                all_files = list(self._path_read.rglob('*.npy'))
-            tabel_roi = tabel_roi[tabel_roi.apply(
-                lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files), 
-                axis=1
-            )]
+                all_files = list(self._path_npy.rglob('*.npy'))
+                condition = lambda x: any(f"{x['PatientID']}__{x['ImagingScanName']}" in file.name for file in all_files)
+            tabel_roi = tabel_roi[tabel_roi.apply(condition, axis=1)]
+
+            # Check if the table is not empty
+            if tabel_roi.empty:
+                raise ValueError(f'No valid scan files found for roi type "{roi_type_label}".')
 
             patient_ids = tabel_roi['PatientID'].tolist()
             modalities = tabel_roi['ImagingModality'].tolist()
             sequences = tabel_roi['ImagingScanName'].tolist()
             roi_names = tabel_roi['ROIname'].tolist()
 
-            # INITIALIZATION
+            # Read dose information if dose features extraction is enabled
+            presc_doses = None
+            if self._pred_doses_csv and self._pred_doses_csv.exists():
+                presc_doses = pd.read_csv(self._pred_doses_csv)
+                if self.presc_dose_column and self.presc_dose_column in presc_doses.columns:
+                    presc_doses = presc_doses[presc_doses['PatientID'].isin(patient_ids)]
+                    presc_doses = dict(zip(presc_doses['PatientID'], presc_doses[self.presc_dose_column]))
+                    presc_doses = {p: presc_doses.get(p, None) for p in patient_ids}
+            else:
+                logging.warning('Dose features extraction is enabled but "PrescriptionDose" column is missing'
+                ' in the CSV file. Dose features will be skipped.')
+
+            # Initialization
+            if not self._path_save.exists():
+                os.makedirs(self._path_save, 0o777, True)
             os.chdir(self._path_save)
             name_bacth_log = 'batchLog_' + roi_type_label
             p = Path.cwd().glob('*')
@@ -661,8 +734,7 @@ class BatchExtractor(object):
             if exist_file and (n_files > 0):
                 for i in range(0, n_files):
                     if (files[i].name == name_bacth_log):
-                        mod_timestamp = datetime.fromtimestamp(
-                            Path(files[i]).stat().st_mtime)
+                        mod_timestamp = datetime.fromtimestamp(Path(files[i]).stat().st_mtime)
                         date = mod_timestamp.strftime("%d-%b-%Y_%HH%MM%SS")
                         new_name = name_bacth_log+'_'+date
                         if sys.platform == 'win32':
@@ -694,7 +766,8 @@ class BatchExtractor(object):
                         im_params=im_params,
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
-                        log_file=log_files[i])
+                        log_file=log_files[i],
+                        presc_dose=presc_doses[patient_ids[i]] if presc_doses is not None else None)
             for i in range(n_batch)]
 
             # Distribute the remaining tasks
@@ -702,7 +775,6 @@ class BatchExtractor(object):
             for _ in trange(n_patients):
                 ready, not_ready = ray.wait(ids, num_returns=1)
                 ids = not_ready
-                test = ray.get(ready)
                 log_file = ray.get(ready)[0]
                 if nb_job_left > 0:
                     idx = n_patients - nb_job_left
@@ -715,7 +787,8 @@ class BatchExtractor(object):
                                     im_params,
                                     roi_type,
                                     roi_type_label,
-                                    log_file)
+                                    log_file,
+                                    presc_dose=presc_doses[patient_ids[idx]] if presc_doses is not None else None)
                                 ])
                     nb_job_left -= 1
 

@@ -1344,7 +1344,7 @@ class CooccurrenceMatrix:
 
         # Append grey level transitions in opposite direction
         df_cm_inv = pd.DataFrame({"g": df_cm.to_g, "to_g": df_cm.g, "n": df_cm.n})
-        df_cm = df_cm.append(df_cm_inv, ignore_index=True)
+        df_cm = pd.concat([df_cm, df_cm_inv], ignore_index=True)
 
         # Sum occurrences of grey level transitions
         df_cm = df_cm.groupby(by=["g", "to_g"]).sum().reset_index()

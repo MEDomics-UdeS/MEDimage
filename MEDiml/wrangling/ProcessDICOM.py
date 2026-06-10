@@ -30,18 +30,22 @@ class ProcessDICOM():
         self,
         path_images: List[Path],
         path_rs: List[Path],
-        path_save: Union[str, Path],
-        save: bool) -> None:
+        save: bool,
+        path_save: Union[str, Path] = None
+    ) -> None:
         """
         Args:
             path_images (List[Path]): List of paths to the dicom files of a single scan.
             path_rs (List[Path]): List of paths to the RT struct dicom files for the same scan.
-            path_save (Union[str, Path]): Path to the folder where the MEDscan object will be saved.
             save (bool): Whether to save the MEDscan object or not.
+            path_save (Union[str, Path], Optional): Path to the folder where the MEDscan object will be saved.
         
         Returns:
             None.
         """
+        if save and path_save is not None:
+            raise ValueError("Please provide a path to save the MEDscan object.")
+
         self.path_images = path_images
         self.path_rs = path_rs
         self.path_save = Path(path_save) if path_save is str else path_save
@@ -404,7 +408,7 @@ class ProcessDICOM():
             medscan (MEDscan): Instance of a MEDscan class.
         """
         
-        return self.process_files_wrapper.remote(self)
+        return ray.get(self.process_files_wrapper.remote(self))
     
     @ray.remote
     def process_files_wrapper(self) -> MEDscan:
