@@ -55,7 +55,7 @@ xgboost = "*"
 [tool.poetry.dev-dependencies]
 
 [tool.poetry.scripts]
-radiomics-nii = "radiomics_nii:main"
+radiomics = "radiomics:main"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

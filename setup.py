@@ -41,7 +41,7 @@ setup(
     install_requires=requirements,
     entry_points={
         'console_scripts': [
-            'radiomics-nii=radiomics_nii:main',
+            'radiomics=radiomics:main',
         ],
     },
 )

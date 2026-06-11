@@ -1,10 +1,10 @@
 from unittest.mock import patch
 
-from radiomics_nii import main
+from radiomics import main
 
 
-def test_cli_forwards_arguments_to_batch_extractor():
-    with patch("radiomics_nii._get_batch_extractor") as get_batch_extractor_mock:
+def test_cli_defaults_to_niftis_and_forwards_arguments_to_batch_extractor():
+    with patch("radiomics._get_batch_extractor") as get_batch_extractor_mock:
         batch_extractor_mock = get_batch_extractor_mock.return_value
         instance = batch_extractor_mock.return_value
 
@@ -27,5 +27,26 @@ def test_cli_forwards_arguments_to_batch_extractor():
         assert str(kwargs["path_save"]) == "output_dir"
         assert kwargs["n_batch"] == 8
         assert kwargs["use_niftis"] is True
+        assert kwargs["use_dicoms"] is False
         assert kwargs["skip_existing"] is True
+        instance.compute_radiomics.assert_called_once()
+
+
+def test_cli_forwards_dicom_selection_to_batch_extractor():
+    with patch("radiomics._get_batch_extractor") as get_batch_extractor_mock:
+        batch_extractor_mock = get_batch_extractor_mock.return_value
+        instance = batch_extractor_mock.return_value
+
+        main([
+            "input_dir",
+            "roi_mapping.csv",
+            "settings.json",
+            "output_dir",
+            "--use-dicoms",
+        ])
+
+        batch_extractor_mock.assert_called_once()
+        _, kwargs = batch_extractor_mock.call_args
+        assert kwargs["use_niftis"] is False
+        assert kwargs["use_dicoms"] is True
         instance.compute_radiomics.assert_called_once()

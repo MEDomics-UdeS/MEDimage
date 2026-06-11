@@ -26,12 +26,10 @@ class BatchExtractor(object):
 
     def __init__(
             self,
+            path_read: Union[str, Path],
             path_csv: Union[str, Path],
             path_params: Union[str, Path],
             path_save: Union[str, Path],
-            path_npy: Union[str, Path] = None,
-            path_dicoms: Union[str, Path] = None,
-            path_niftis: Union[str, Path] = None,
             pred_doses_csv: Union[str, Path] = None,
             presc_dose_column: str = None,
             n_batch: int = 4,
@@ -46,17 +44,14 @@ class BatchExtractor(object):
         assert not (use_niftis and use_dicoms), "Please select either NIfTI files or DICOM files "
         "for processing, not both."
 
-        if use_niftis and path_niftis is None:
-            raise ValueError("If use_niftis is True, please provide a path to the NIfTI files.")
-
-        if use_dicoms and path_dicoms is None:
-            raise ValueError("If use_dicoms is True, please provide a path to the DICOM files.")
+        if not Path(path_read).exists():
+            raise ValueError("The provided path for reading scan files does not exist. Please check the path and try again.")
 
         self._path_csv = Path(path_csv)
         self._path_params = Path(path_params)
-        self._path_npy = Path(path_npy) if path_npy else None
-        self._path_dicoms = Path(path_dicoms) if path_dicoms else None
-        self._path_niftis = Path(path_niftis) if path_niftis else None
+        self._path_npy = Path(path_read) if path_read else None
+        self._path_dicoms = Path(path_read) if path_read else None
+        self._path_niftis = Path(path_read) if path_read else None
         self._path_save = Path(path_save)
         self._pred_doses_csv = Path(pred_doses_csv) if pred_doses_csv else None
         self.presc_dose_column = presc_dose_column
