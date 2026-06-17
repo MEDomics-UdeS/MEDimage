@@ -57,13 +57,11 @@
       "distCorrection": false
     },
     "glrlm": {
-      "distCorrection": false
+      "distCorrection": false,
+      "merge_method": "vol_merge"
     },
-    "gldzm": {
-      "distanceNorm": {
-        "method": "Chebyshev",
-        "value": 1,
-        "unit": ""
+    "ngtdm": {
+      "dist_correction": false
     },
     "extract": {
       "Morph": true,
@@ -78,27 +76,6 @@
       "NGTDM": true,
       "NGLDM": true,
       "Dose": false
-    },
-    "dose_features": {
-      "rx_dose": null,
-      "prescribed_idl": null
-    }
-    },
-    "ngtdm": {
-      "distanceNorm": {
-        "method": "Chebyshev",
-        "value": 1,
-        "unit": ""
-      },
-      "distCorrection": false
-    },
-    "ngldm": {
-      "distanceNorm": {
-        "method": "Chebyshev",
-        "value": 1,
-        "unit": ""
-      },
-      "coarseness": 0
     },
     "filter": false,
     "intensity": "arbitrary",

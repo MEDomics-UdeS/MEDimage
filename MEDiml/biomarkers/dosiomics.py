@@ -2,6 +2,8 @@ from typing import Optional, Union
 
 import numpy as np
 
+from ..processing.segmentation import compute_bounding_box
+
 
 def _validate_volume(volume: np.ndarray) -> None:
     """Validate that dose volume is a 3D numpy array."""
@@ -79,6 +81,17 @@ def _safe_divide(num: float, den: float) -> float:
     return float(num / den)
 
 
+def coverage(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
+    """proportion of the tumor volume that is covered by the PIV"""
+    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)  # PIV in cc
+    tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask)  # TV in cc
+    return _safe_divide(tv_piv_val, tv_val) * 100.0  # Return percentage
+
+
+def d_max(volume: np.ndarray, mask: np.ndarray) -> float:
+    """Compute Dmax (maximum dose), i.e. 100th percentile dose in ROI (Gy)."""
+    return float(np.percentile(_roi_dose_values(volume, mask), 100.0))
+
 def d2_percent(volume: np.ndarray, mask: np.ndarray) -> float:
     """Compute D2% (near-maximum dose), i.e. 98th percentile dose in ROI (Gy)."""
     return float(np.percentile(_roi_dose_values(volume, mask), 98.0))
@@ -97,6 +110,13 @@ def d95_percent(volume: np.ndarray, mask: np.ndarray) -> float:
 def d50_percent(volume: np.ndarray, mask: np.ndarray) -> float:
     """Compute D50% (median dose), i.e. 50th percentile dose in ROI (Gy)."""
     return float(np.percentile(_roi_dose_values(volume, mask), 50.0))
+
+
+def selectivity(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
+    """proportion of the tumor volume that is covered by the PIV"""
+    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)  # PIV in cc
+    piv_val = piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose)  # PIV in cc
+    return _safe_divide(tv_piv_val, piv_val)
 
 
 def v_x(
@@ -118,8 +138,44 @@ def v_x(
     Returns:
         float: Absolute volume in cc receiving at least x Gy.
     """
+    if mask is not None:
+        box_bound = compute_bounding_box(mask=mask)
+
+        ext = 20
+
+        # Extend boudning box by 10 voxels in each direction to avoid edge effects
+        new_mask = np.array([
+            [max(0, box_bound[0][0] - ext), min(mask.shape[0], box_bound[0][1] + ext)],
+            [max(0, box_bound[1][0] - ext), min(mask.shape[1], box_bound[1][1] + ext)],
+            [max(0, box_bound[2][0] - ext), min(mask.shape[2], box_bound[2][1] + ext)],
+        ])
+        #mask[new_mask[0][0]:new_mask[0][1], new_mask[1][0]:new_mask[1][1], new_mask[2][0]:new_mask[2][1]] = 1
+
     vx_voxel_count = _count_threshold_voxels(volume=volume, threshold=x, mask=mask)
     return float(vx_voxel_count * _voxel_volume_cc(vox_dim))
+
+
+def v_x_p(
+    volume: np.ndarray,
+    vox_dim: Union[list, tuple, np.ndarray],
+    x: float,
+    mask: np.ndarray,
+) -> float:
+    """
+    Compute volume percentage receiving at least x Gy.
+
+    Args:
+        volume (np.ndarray): 3D planned dose distribution in Gy.
+        vox_dim (list, tuple, np.ndarray): Voxel dimensions in mm as (dx, dy, dz).
+        x (float): Dose threshold in Gy.
+        mask (np.ndarray): 3D binary mask; computation is restricted to mask voxels > 0.
+
+    Returns:
+        float: Volume percentage receiving at least x Gy.
+    """
+    vx_val = v_x(volume=volume, vox_dim=vox_dim, x=x, mask=mask)
+    tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask)
+    return _safe_divide(vx_val, tv_val) * 100.0  # Return percentage
 
 
 def tv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], mask: np.ndarray) -> float:
@@ -130,9 +186,9 @@ def tv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], mask: np.nda
     return float(tv_voxels * _voxel_volume_cc(vox_dim))
 
 
-def piv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
+def piv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask: np.ndarray = None) -> float:
     """Compute prescription isodose volume (PIV) in cc over the whole grid."""
-    return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose, mask=None)
+    return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose, mask=mask)
 
 
 def piv_half(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
@@ -182,7 +238,17 @@ def gradient_index(
     return _safe_divide(piv_half_val, piv_val)
 
 
-def heterogeneity_index(volume: np.ndarray, mask: np.ndarray) -> float:
+def heterogeneity_index_RTOG(volume: np.ndarray, mask: np.ndarray, presc_dose: float) -> float:
+    """
+    Compute DVH-based heterogeneity index.
+
+    HI = Dmax / Dprescribed
+    """
+    dmax = d_max(volume=volume, mask=mask)
+    return _safe_divide(dmax, presc_dose)
+
+
+def heterogeneity_index_ICRU_83(volume: np.ndarray, mask: np.ndarray) -> float:
     """
     Compute DVH-based heterogeneity index.
 
@@ -199,6 +265,7 @@ def extract_all(
     vox_dim: Union[list, tuple, np.ndarray],
     presc_dose: float,
     mask: np.ndarray,
+    vx_thresholds: Optional[Union[list, tuple, np.ndarray]] = None,
 ) -> dict:
     """Compute all implemented dosiomics features.
 
@@ -227,9 +294,19 @@ def extract_all(
         "Fdos_PIV": piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
         "Fdos_PIV_half": piv_half(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
         "Fdos_TV_PIV": tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask),
+        "Fdos_Coverage": coverage(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose),
+        "Fdos_Selectivity": selectivity(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose),
         "Fdos_CI": conformity_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask),
         "Fdos_GI": gradient_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
-        "Fdos_HI": heterogeneity_index(volume=volume, mask=mask),
+        "Fdos_HI_method_ICRU-83": heterogeneity_index_ICRU_83(volume=volume, mask=mask),
+        "Fdos_HI_method_RTOG": heterogeneity_index_RTOG(volume=volume, mask=mask, presc_dose=presc_dose),
     }
+
+    if vx_thresholds is None:
+        vx_thresholds = [2, 4, 8, 10, 12, 15, 20, 25, 30]
+
+    for x in vx_thresholds:
+        dosiomics[f"Fdos_V{x}_cc"] = v_x(volume=volume, vox_dim=vox_dim, x=float(x))
+        dosiomics[f"Fdos_V{x}_p"] = v_x_p(volume=volume, vox_dim=vox_dim, x=float(x), mask=mask)
 
     return dosiomics
