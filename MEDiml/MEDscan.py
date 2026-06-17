@@ -121,6 +121,7 @@ class MEDscan(object):
         self.params.process.gray_levels = im_params['discretisation']['texture']['val'] if 'val' in im_params['discretisation']['texture'] else [[]]
         self.params.process.im_type = self.type
         self.params.process.dose_vx_thresholds = im_params['dose_vx_thresholds'] if 'dose_vx_thresholds' in im_params else None
+        self.params.process.dose_mask_extension = im_params['dose_mask_extension'] if 'dose_mask_extension' in im_params else None
 
         # Voxels dimension
         self.params.process.n_scale = len(self.params.process.scale_text)
@@ -707,6 +708,7 @@ class MEDscan(object):
                 self.user_set_min_value = kwargs['user_set_min_value'] if 'user_set_min_value' in kwargs else None
                 self.vol_interp = kwargs['vol_interp'] if 'vol_interp' in kwargs else None
                 self.dose_vx_thresholds = kwargs['dose_vx_thresholds'] if 'dose_vx_thresholds' in kwargs else None
+                self.dose_mask_extension = kwargs['dose_mask_extension'] if 'dose_mask_extension' in kwargs else None
 
             def init_from_json(self, path_to_json: Union[Path, str]) -> None:
                 """
@@ -740,6 +742,7 @@ class MEDscan(object):
                 self.user_set_min_value = __params['user_set_min_value'] if 'user_set_min_value' in __params else self.user_set_min_value
                 self.vol_interp = __params['vol_interp'] if 'vol_interp' in __params else self.vol_interp
                 self.dose_vx_thresholds = __params['dose_vx_thresholds'] if 'dose_vx_thresholds' in __params else self.dose_vx_thresholds
+                self.dose_mask_extension = __params['dose_mask_extension'] if 'dose_mask_extension' in __params else self.dose_mask_extension
 
         class Filter:
             """Organizes all filtering parameters"""

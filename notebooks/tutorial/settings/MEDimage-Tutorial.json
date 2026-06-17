@@ -87,6 +87,7 @@
       "Dose": false
     },
     "dose_vx_thresholds": [2, 4, 8, 10, 12, 15, 20, 25, 30],
+    "dose_mask_extension": 0,
     "filter_type": "",
     "intensity_type": ""
   },
@@ -163,6 +164,7 @@
       "Dose": false
     },
     "dose_vx_thresholds": [2, 4, 8, 10, 12, 15, 20, 25, 30],
+    "dose_mask_extension": 0,
     "filter_type": "",
     "intensity_type": ""
   },
@@ -251,6 +253,7 @@
       "Dose": false
     },
     "dose_vx_thresholds": [2, 4, 8, 10, 12, 15, 20, 25, 30],
+    "dose_mask_extension": 0,
     "filter_type": "",
     "intensity_type": ""
   },

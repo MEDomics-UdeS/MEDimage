@@ -320,6 +320,7 @@ class BatchExtractor(object):
                         vox_dim=medscan.params.process.scale_non_text,
                         presc_dose=presc_dose,
                         mask=roi_obj_int.data,
+                        mask_extension=medscan.params.process.dose_mask_extension,
                         vx_thresholds=medscan.params.process.dose_vx_thresholds
                     )
         except Exception as e:
