@@ -14,7 +14,7 @@ with open('requirements.txt') as f:
 
 setup(
     name="MEDiml",
-    version="0.13.0",
+    version="0.14.0",
     author="MEDomics consortium",
     author_email="medomics.info@gmail.com",
     description="Python Open-source package for medical images processing and radiomic features extraction",
