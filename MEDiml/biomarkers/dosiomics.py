@@ -81,9 +81,9 @@ def _safe_divide(num: float, den: float) -> float:
     return float(num / den)
 
 
-def coverage(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask_extension: int = 0) -> float:
+def coverage(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
     """proportion of the tumor volume that is covered by the PIV"""
-    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension)  # PIV in cc
+    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)  # PIV in cc
     tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask)  # TV in cc
     return _safe_divide(tv_piv_val, tv_val) * 100.0  # Return percentage
 
@@ -112,10 +112,10 @@ def d50_percent(volume: np.ndarray, mask: np.ndarray) -> float:
     return float(np.percentile(_roi_dose_values(volume, mask), 50.0))
 
 
-def selectivity(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask_extension: int = 0) -> float:
+def selectivity(volume: np.ndarray, mask: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float) -> float:
     """proportion of the tumor volume that is covered by the PIV"""
-    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension)  # PIV in cc
-    piv_val = piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension)  # PIV in cc
+    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)  # PIV in cc
+    piv_val = piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)  # PIV in cc
     return _safe_divide(tv_piv_val, piv_val)
 
 
@@ -141,16 +141,31 @@ def v_x(
     Returns:
         float: Absolute volume in cc receiving at least x Gy.
     """
+    mask_extension = 0 if mask_extension is None else mask_extension
     if mask is not None and mask_extension > 0:
         box_bound = compute_bounding_box(mask=mask)
+        extended_mask = np.zeros_like(mask, dtype=bool)
 
-        # Extend boudning box by 10 voxels in each direction to avoid edge effects
-        new_mask = np.array([
-            [max(0, box_bound[0][0] - mask_extension), min(mask.shape[0], box_bound[0][1] + mask_extension)],
-            [max(0, box_bound[1][0] - mask_extension), min(mask.shape[1], box_bound[1][1] + mask_extension)],
-            [max(0, box_bound[2][0] - mask_extension), min(mask.shape[2], box_bound[2][1] + mask_extension)],
-        ])
-        mask[new_mask[0][0]:new_mask[0][1], new_mask[1][0]:new_mask[1][1], new_mask[2][0]:new_mask[2][1]] = 1
+        
+        if mask_extension < 1:
+            # Percentage based extension
+            new_mask = np.array([
+                [max(0, box_bound[0][0] - int(box_bound[0][0] * mask_extension)), min(mask.shape[0], box_bound[0][1] + int(box_bound[0][1] * mask_extension))],
+                [max(0, box_bound[1][0] - int(box_bound[1][0] * mask_extension)), min(mask.shape[1], box_bound[1][1] + int(box_bound[1][1] * mask_extension))],
+                [max(0, box_bound[2][0] - int(box_bound[2][0] * mask_extension)), min(mask.shape[2], box_bound[2][1] + int(box_bound[2][1] * mask_extension))],
+            ])
+
+        else:
+            # Extend boudning box by the given number of voxels in each direction
+            new_mask = np.array([
+                [max(0, box_bound[0][0] - mask_extension), min(mask.shape[0], box_bound[0][1] + mask_extension)],
+                [max(0, box_bound[1][0] - mask_extension), min(mask.shape[1], box_bound[1][1] + mask_extension)],
+                [max(0, box_bound[2][0] - mask_extension), min(mask.shape[2], box_bound[2][1] + mask_extension)],
+            ])
+        extended_mask[new_mask[0][0]:new_mask[0][1], new_mask[1][0]:new_mask[1][1], new_mask[2][0]:new_mask[2][1]] = 1
+
+        vx_voxel_count = _count_threshold_voxels(volume=volume, threshold=x, mask=extended_mask)
+        return float(vx_voxel_count * _voxel_volume_cc(vox_dim))
 
     vx_voxel_count = _count_threshold_voxels(volume=volume, threshold=x, mask=mask)
     return float(vx_voxel_count * _voxel_volume_cc(vox_dim))
@@ -205,10 +220,9 @@ def tv_piv(
     vox_dim: Union[list, tuple, np.ndarray],
     presc_dose: float,
     mask: np.ndarray,
-    mask_extension: int = 0,
 ) -> float:
     """Compute TV_PIV overlap volume (TV intersect PIV) in cc."""
-    return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose, mask=mask, mask_extension=mask_extension)
+    return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose, mask=mask)
 
 
 def conformity_index(
@@ -216,7 +230,6 @@ def conformity_index(
     vox_dim: Union[list, tuple, np.ndarray],
     presc_dose: float,
     mask: np.ndarray,
-    mask_extension: int = 0,
 ) -> float:
     """
     Compute Paddick conformity index.
@@ -224,8 +237,8 @@ def conformity_index(
     CI = (TV_PIV^2) / (TV * PIV)
     """
     tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask)
-    piv_val = piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension)
-    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension)
+    piv_val = piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)
+    tv_piv_val = tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask)
     return _safe_divide(tv_piv_val**2, tv_val * piv_val)
 
 
@@ -295,6 +308,9 @@ def extract_all(
     if presc_dose is not None and presc_dose <= 0:
         raise ValueError("Prescribed dose must be strictly positive")
 
+    if mask_extension is None:
+        mask_extension = 0
+
     if presc_dose is None:
         dosiomics = {
             "Fdos_D2": d2_percent(volume=volume, mask=mask),
@@ -315,12 +331,12 @@ def extract_all(
             "Fdos_D2": d2_percent(volume=volume, mask=mask),
             "Fdos_D98": d98_percent(volume=volume, mask=mask),
             "Fdos_D95": d95_percent(volume=volume, mask=mask),
-            "Fdos_PIV": piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
+            "Fdos_PIV": piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
             "Fdos_PIV_half": piv_half(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-            "Fdos_TV_PIV": tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
-            "Fdos_Coverage": coverage(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-            "Fdos_Selectivity": selectivity(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-            "Fdos_CI": conformity_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
+            "Fdos_TV_PIV": tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask),
+            "Fdos_Coverage": coverage(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose),
+            "Fdos_Selectivity": selectivity(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose),
+            "Fdos_CI": conformity_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask),
             "Fdos_GI": gradient_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
             "Fdos_HI_method_ICRU-83": heterogeneity_index_ICRU_83(volume=volume, mask=mask),
             "Fdos_HI_method_RTOG": heterogeneity_index_RTOG(volume=volume, mask=mask, presc_dose=presc_dose),
