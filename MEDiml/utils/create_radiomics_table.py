@@ -28,7 +28,7 @@ def create_radiomics_table(radiomics_files_paths: List, image_space: str, log_fi
     """
     if log_file:
         # Setting up logging settings
-        logging.basicConfig(filename=log_file, level=logging.DEBUG)
+        logging.basicConfig(filename=log_file, level=logging.INFO)
     
     # INITIALIZATIONS OF RADIOMICS STRUCTURES
     n_files = len(radiomics_files_paths)

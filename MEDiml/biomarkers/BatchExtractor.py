@@ -105,7 +105,7 @@ class BatchExtractor(object):
             Union[Path, str]: Path to the updated logging file.
         """
         # Setting up logging settings
-        logging.basicConfig(filename=log_file, level=logging.DEBUG, force=True)
+        logging.basicConfig(filename=log_file, level=logging.INFO, force=True)
 
         # Check if features are already computed for the current scan
         if self.skip_existing:
@@ -592,6 +592,8 @@ class BatchExtractor(object):
         Returns:
             None.
         """
+        logging.basicConfig(filename=log_file, level=logging.INFO, force=True)
+
         n_tables = len(table_tags)
 
         for t in range(0, n_tables):
@@ -649,7 +651,7 @@ class BatchExtractor(object):
             # Create CSV table and Definitions
             MEDiml.utils.write_radiomics_csv(save_path)
 
-            logging.info(f"DONE\n {time() - start}\n")
+            logging.info(f"DONE\nTime taken: {time() - start} seconds\n")
 
         return log_file
     
@@ -719,25 +721,8 @@ class BatchExtractor(object):
             # Initialization
             if not self._path_save.exists():
                 os.makedirs(self._path_save, 0o777, True)
-            os.chdir(self._path_save)
-            name_bacth_log = 'batchLog_' + roi_type_label
-            p = Path.cwd().glob('*')
-            files = [x for x in p if x.is_dir()]
-            n_files = len(files)
-            exist_file = name_bacth_log in [x.name for x in files]
-            if exist_file and (n_files > 0):
-                for i in range(0, n_files):
-                    if (files[i].name == name_bacth_log):
-                        mod_timestamp = datetime.fromtimestamp(Path(files[i]).stat().st_mtime)
-                        date = mod_timestamp.strftime("%d-%b-%Y_%HH%MM%SS")
-                        new_name = name_bacth_log+'_'+date
-                        if sys.platform == 'win32':
-                            os.system('move ' + name_bacth_log + ' ' + new_name)
-                        else:
-                            os.system('mv ' + name_bacth_log + ' ' + new_name)
-
-            os.makedirs(name_bacth_log, 0o777, True)
-            path_batch = Path.cwd() / name_bacth_log
+            current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            log_file_path = self._path_save / ('batchLog_' + roi_type_label + '_' + current_date + '.log')
 
             # PRODUCE BATCH COMPUTATIONS
             n_patients = len(patient_ids)
@@ -746,9 +731,6 @@ class BatchExtractor(object):
                 n_batch = 1
             elif n_patients < n_batch:
                 n_batch = n_patients
-
-            # Produce a list log_file path.
-            log_files = [path_batch / ('log_file_' + str(i) + '.log') for i in range(n_batch)]
 
             # Distribute the first tasks to all workers
             ids = [self.__compute_radiomics_one_patient.remote(
@@ -760,7 +742,7 @@ class BatchExtractor(object):
                         im_params=im_params,
                         roi_type=roi_type,
                         roi_type_label=roi_type_label,
-                        log_file=log_files[i],
+                        log_file=log_file_path,
                         presc_dose=presc_doses[patient_ids[i]] if presc_doses is not None else None)
             for i in range(n_batch)]
 
@@ -769,7 +751,12 @@ class BatchExtractor(object):
             for _ in trange(n_patients):
                 ready, not_ready = ray.wait(ids, num_returns=1)
                 ids = not_ready
-                log_file = ray.get(ready)[0]
+                for ref in ready:
+                    try:
+                        _ = ray.get(ref)
+                    except ray.exceptions.RayTaskError as e:
+                        raise ValueError(f"Extraction task failed with error: {e.cause}")
+
                 if nb_job_left > 0:
                     idx = n_patients - nb_job_left
                     ids.extend([self.__compute_radiomics_one_patient.remote(
@@ -781,7 +768,7 @@ class BatchExtractor(object):
                                     im_params,
                                     roi_type,
                                     roi_type_label,
-                                    log_file,
+                                    log_file_path,
                                     presc_dose=presc_doses[patient_ids[idx]] if presc_doses is not None else None)
                                 ])
                     nb_job_left -= 1
@@ -834,27 +821,11 @@ class BatchExtractor(object):
                     im_space = im_spaces[i]
                     table_tags = table_tags + [[scan, label, self.roi_types[r], im_space, modality]]
 
-        # INITIALIZATION
-        os.chdir(self._path_save)
-        name_batch_log = 'batchLog_tables'
-        p = Path.cwd().glob('*')
-        files = [x for x in p if x.is_dir()]
-        n_files = len(files)
-        exist_file = name_batch_log in [x.name for x in files]
-        if exist_file and (n_files > 0):
-            for i in range(0, n_files):
-                if files[i].name == name_batch_log:
-                    mod_timestamp = datetime.fromtimestamp(
-                        Path(files[i]).stat().st_mtime)
-                    date = mod_timestamp.strftime("%d-%b-%Y_%H:%M:%S")
-                    new_name = name_batch_log+'_'+date
-                    if sys.platform == 'win32':
-                        os.system('move ' + name_batch_log + ' ' + new_name)
-                    else:
-                        os.system('mv ' + name_batch_log + ' ' + new_name)
-
-        os.makedirs(name_batch_log, 0o777, True)
-        path_batch = Path.cwd()
+        # Initialization
+        if not self._path_save.exists():
+            os.makedirs(self._path_save, 0o777, True)
+        current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        log_file_path = self._path_save / ('batchLog_tables_' + current_date + '.log')
 
         # PRODUCE BATCH COMPUTATIONS
         n_tables = len(table_tags)
@@ -864,14 +835,11 @@ class BatchExtractor(object):
         elif n_tables < self.n_bacth:
             self.n_bacth = n_tables
 
-        # Produce a list log_file path.
-        log_files = [path_batch / ('log_file_' + str(i) + '.txt') for i in range(self.n_bacth)]
-
         # Distribute the first tasks to all workers
         ids = [self.__compute_radiomics_tables.remote(
                                 self, 
                                 [table_tags[i]], 
-                                log_files[i],
+                                log_file_path,
                                 im_params)
                 for i in range(self.n_bacth)]
 
@@ -882,7 +850,11 @@ class BatchExtractor(object):
             ids = not_ready
 
             # We verify if error has occur during the process
-            log_file = ray.get(ready)[0]
+            for ref in ready:
+                try:
+                    _ = ray.get(ref)
+                except ray.exceptions.RayTaskError as e:
+                    raise ValueError(f"Extraction tables creation failed with error: {e.cause}")
 
             # Distribute the remaining tasks
             if nb_job_left > 0:
@@ -890,7 +862,7 @@ class BatchExtractor(object):
                 ids.extend([self.__compute_radiomics_tables.remote(
                                 self,
                                 [table_tags[idx]], 
-                                log_file,
+                                log_file_path,
                                 im_params)])
                 nb_job_left -= 1
 
