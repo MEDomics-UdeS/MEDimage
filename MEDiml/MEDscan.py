@@ -708,7 +708,7 @@ class MEDscan(object):
                 self.user_set_min_value = kwargs['user_set_min_value'] if 'user_set_min_value' in kwargs else None
                 self.vol_interp = kwargs['vol_interp'] if 'vol_interp' in kwargs else None
                 self.dose_vx_thresholds = kwargs['dose_vx_thresholds'] if 'dose_vx_thresholds' in kwargs else None
-                self.dose_mask_extension = kwargs['dose_mask_extension'] if 'dose_mask_extension' in kwargs else None
+                self.dose_mask_extension = kwargs['dose_mask_extension'] if 'dose_mask_extension' in kwargs else 0
 
             def init_from_json(self, path_to_json: Union[Path, str]) -> None:
                 """

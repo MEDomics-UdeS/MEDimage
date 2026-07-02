@@ -312,17 +312,14 @@ class BatchExtractor(object):
         dose_features = None
         try:
             if medscan.params.radiomics.extract['Dose']:
-                if presc_dose is None:
-                    logging.warning('Dose features are enabled but no rx_dose was provided; skipping dose extraction.')
-                else:
-                    dose_features = MEDiml.biomarkers.dosiomics.extract_all(
-                        volume=vol_obj.data,
-                        vox_dim=medscan.params.process.scale_non_text,
-                        presc_dose=presc_dose,
-                        mask=roi_obj_int.data,
-                        mask_extension=medscan.params.process.dose_mask_extension,
-                        vx_thresholds=medscan.params.process.dose_vx_thresholds
-                    )
+                dose_features = MEDiml.biomarkers.dosiomics.extract_all(
+                    volume=vol_obj.data,
+                    vox_dim=medscan.params.process.scale_non_text,
+                    mask=roi_obj_int.data,
+                    presc_dose=presc_dose,
+                    mask_extension=medscan.params.process.dose_mask_extension,
+                    vx_thresholds=medscan.params.process.dose_vx_thresholds
+                )
         except Exception as e:
             logging.error(f'PROBLEM WITH COMPUTATION OF DOSE FEATURES {e}')
             dose_features = None
@@ -675,7 +672,7 @@ class BatchExtractor(object):
 
             # Check if the CSV file exists
             if not self._path_csv.exists():
-                raise FileNotFoundError(f'CSV file not found at path: {self._path_csv}. Please check the path and try again.')
+                raise FileNotFoundError(f'ROIs CSV file not found at path: {self._path_csv}. Please check the path and try again.')
 
             # READING CSV EXPERIMENT TABLE
             tabel_roi = pd.read_csv(self._path_csv)

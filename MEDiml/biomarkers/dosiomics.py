@@ -270,8 +270,8 @@ def heterogeneity_index_ICRU_83(volume: np.ndarray, mask: np.ndarray) -> float:
 def extract_all(
     volume: np.ndarray,
     vox_dim: Union[list, tuple, np.ndarray],
-    presc_dose: float,
     mask: np.ndarray,
+    presc_dose: float = None,
     mask_extension: int = 0,
     vx_thresholds: Optional[Union[list, tuple, np.ndarray]] = None,
 ) -> dict:
@@ -292,23 +292,39 @@ def extract_all(
     _validate_mask(mask, volume)
     _validate_vox_dim(vox_dim)
 
-    if presc_dose <= 0:
+    if presc_dose is not None and presc_dose <= 0:
         raise ValueError("Prescribed dose must be strictly positive")
 
-    dosiomics = {
-        "Fdos_D2": d2_percent(volume=volume, mask=mask),
-        "Fdos_D98": d98_percent(volume=volume, mask=mask),
-        "Fdos_D95": d95_percent(volume=volume, mask=mask),
-        "Fdos_PIV": piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
-        "Fdos_PIV_half": piv_half(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-        "Fdos_TV_PIV": tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
-        "Fdos_Coverage": coverage(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-        "Fdos_Selectivity": selectivity(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-        "Fdos_CI": conformity_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
-        "Fdos_GI": gradient_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
-        "Fdos_HI_method_ICRU-83": heterogeneity_index_ICRU_83(volume=volume, mask=mask),
-        "Fdos_HI_method_RTOG": heterogeneity_index_RTOG(volume=volume, mask=mask, presc_dose=presc_dose),
-    }
+    if presc_dose is None:
+        dosiomics = {
+            "Fdos_D2": d2_percent(volume=volume, mask=mask),
+            "Fdos_D98": d98_percent(volume=volume, mask=mask),
+            "Fdos_D95": d95_percent(volume=volume, mask=mask),
+            "Fdos_PIV": None,
+            "Fdos_PIV_half": None,
+            "Fdos_TV_PIV": None,
+            "Fdos_Coverage": None,
+            "Fdos_Selectivity": None,
+            "Fdos_CI": None,
+            "Fdos_GI": None,
+            "Fdos_HI_method_ICRU-83": heterogeneity_index_ICRU_83(volume=volume, mask=mask),
+            "Fdos_HI_method_RTOG": None,
+        }
+    else:
+        dosiomics = {
+            "Fdos_D2": d2_percent(volume=volume, mask=mask),
+            "Fdos_D98": d98_percent(volume=volume, mask=mask),
+            "Fdos_D95": d95_percent(volume=volume, mask=mask),
+            "Fdos_PIV": piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose),
+            "Fdos_PIV_half": piv_half(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
+            "Fdos_TV_PIV": tv_piv(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
+            "Fdos_Coverage": coverage(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
+            "Fdos_Selectivity": selectivity(volume=volume, mask=mask, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
+            "Fdos_CI": conformity_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask=mask, mask_extension=mask_extension),
+            "Fdos_GI": gradient_index(volume=volume, vox_dim=vox_dim, presc_dose=presc_dose, mask_extension=mask_extension),
+            "Fdos_HI_method_ICRU-83": heterogeneity_index_ICRU_83(volume=volume, mask=mask),
+            "Fdos_HI_method_RTOG": heterogeneity_index_RTOG(volume=volume, mask=mask, presc_dose=presc_dose),
+        }
 
     if vx_thresholds is None:
         vx_thresholds = [2, 4, 8, 10, 12, 15, 20, 25, 30]
