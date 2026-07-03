@@ -9,6 +9,7 @@ from time import time
 from typing import List, Union
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator, ScalarFormatter
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -806,12 +807,76 @@ class DataManager(object):
         if retrun_summary:
             return summary_df
 
+    def __adapt_wildcard_for_format(
+            self,
+            wildcard: str,
+            use_dicoms: bool,
+            use_niftis: bool
+        ) -> str:
+        if use_dicoms:
+            for ext in ('.npy', '.nii.gz', '.nii'):
+                wildcard = wildcard.replace(ext, '.dcm')
+            return wildcard
+        if use_niftis:
+            for ext in ('.npy', '.dcm'):
+                wildcard = wildcard.replace(ext, '.nii*')
+            return wildcard
+        for ext in ('.dcm', '.nii.gz', '.nii'):
+            wildcard = wildcard.replace(ext, '.npy')
+        return wildcard
+
+    def __filter_file_paths_by_format(
+            self,
+            file_paths: List[Path],
+            use_dicoms: bool,
+            use_niftis: bool
+        ) -> List[Path]:
+        if use_dicoms:
+            return [f for f in file_paths if f.name.endswith('.dcm')]
+        if use_niftis:
+            return [f for f in file_paths if f.name.endswith('.nii') or f.name.endswith('.nii.gz')]
+        return [f for f in file_paths if f.name.endswith('.npy')]
+
+    def __get_pre_radiomics_file_paths(
+            self,
+            path_data: Union[Path, str],
+            wildcard: str,
+            use_dicoms: bool,
+            use_niftis: bool
+        ) -> List[Path]:
+        wildcard = self.__adapt_wildcard_for_format(wildcard, use_dicoms, use_niftis)
+        if path_data:
+            file_paths = get_file_paths(path_data, wildcard)
+        elif self.paths._path_save:
+            file_paths = get_file_paths(self.paths._path_save, wildcard)
+        else:
+            raise ValueError("Path data is invalid.")
+        return self.__filter_file_paths_by_format(file_paths, use_dicoms, use_niftis)
+
+    def __load_medscan_for_pre_radiomics_checks(
+            self,
+            file_path: Path,
+            path_data: Union[Path, str],
+            use_dicoms: bool,
+            use_niftis: bool
+        ):
+        if use_dicoms:
+            return self.process_one_dicom(file_path)
+        if use_niftis:
+            if 'ROI' in file_path.name.split("."):
+                return None
+            return self.__process_one_nifti(file_path, path_data)
+        with open(file_path, 'rb') as file:
+            return pickle.load(file)
+
     def __pre_radiomics_checks_dimensions(
             self,
             path_data: Union[Path, str] = None,
             wildcards_dimensions: List[str] = [],
             min_percentile: float = 0.05,
             max_percentile: float = 0.95,
+            use_dicoms: bool = False,
+            use_niftis: bool = False,
             save: bool = False
         ) -> None:
         """Finds proper voxels dimension options for radiomics analyses for a group of scans
@@ -824,6 +889,8 @@ class DataManager(object):
                 :ref:`this link <https://www.linuxtechtips.com/2013/11/how-wildcards-work-in-linux-and-unix.html>`.
             min_percentile (float, optional): Minimum percentile to use for the histograms. Defaults to 0.05.
             max_percentile (float, optional): Maximum percentile to use for the histograms. Defaults to 0.95.
+            use_dicoms (bool, optional): Load DICOM files (``.dcm``). Defaults to False.
+            use_niftis (bool, optional): Load NIfTI files (``.nii`` / ``.nii.gz``). Defaults to False.
             save (bool, optional): If True, will save the results in a json file. Defaults to False.
         
         Returns:
@@ -870,12 +937,9 @@ class DataManager(object):
         file_paths = list()
         for w in range(len(wildcards_dimensions)):
             wildcard = wildcards_dimensions[w]
-            if path_data:
-                file_paths = get_file_paths(path_data, wildcard)
-            elif self.paths._path_save:
-                file_paths = get_file_paths(self.paths._path_save, wildcard)
-            else:
-                raise ValueError("Path data is invalid.")
+            file_paths = self.__get_pre_radiomics_file_paths(
+                path_data, wildcard, use_dicoms, use_niftis
+            )
             n_files = len(file_paths)
             xy_dim["data"] = np.zeros((n_files, 1))
             xy_dim["data"] = np.multiply(xy_dim["data"], np.nan)
@@ -883,15 +947,11 @@ class DataManager(object):
             z_dim["data"] = np.multiply(z_dim["data"], np.nan)
             for f in tqdm(range(len(file_paths))):
                 try:
-                    if file_paths[f].name.endswith("nii.gz") or file_paths[f].name.endswith("nii"):
-                        if 'ROI' in file_paths[f].name.split("."):
-                            continue  # skip ROI files
-                        medscan = self.__process_one_nifti(file_paths[f], path_data)
-                    elif file_paths[f].name.endswith("dcm"):
-                        medscan = self.process_one_dicom(file_paths[f])
-                    elif file_paths[f].name.endswith("npy"):
-                        with open(file_paths[f], 'rb') as file:
-                            medscan = pickle.load(file)
+                    medscan = self.__load_medscan_for_pre_radiomics_checks(
+                        file_paths[f], path_data, use_dicoms, use_niftis
+                    )
+                    if medscan is None:
+                        continue
                     xy_dim["data"][f] = medscan.data.volume.spatialRef.PixelExtentInWorldX
                     z_dim["data"][f]  = medscan.data.volume.spatialRef.PixelExtentInWorldZ
                 except Exception as e:
@@ -1037,16 +1097,18 @@ class DataManager(object):
 
 
     def __pre_radiomics_checks_window(
-        self,
-        path_data: Union[str, Path] = None,
-        wildcards_window: List = [], 
-        path_csv: Union[str, Path] = None,
-        min_percentile: float = 0.05,
-        max_percentile: float = 0.95,
-        bin_width: int = 0,
-        hist_range: list = [],
-        compute_suv_map: bool = False,
-        save: bool = False
+            self,
+            path_data: Union[str, Path] = None,
+            wildcards_window: List = [], 
+            path_csv: Union[str, Path] = None,
+            min_percentile: float = 0.05,
+            max_percentile: float = 0.95,
+            bin_width: int = 0,
+            hist_range: list = [],
+            compute_suv_map: bool = False,
+            use_dicoms: bool = False,
+            use_niftis: bool = False,
+            save: bool = False
         ) -> None:
         """Finds proper re-segmentation ranges options for radiomics analyses for a group of scans
 
@@ -1065,6 +1127,8 @@ class DataManager(object):
                 :ref:`pandas.DataFrame.hist <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.hist.html>`: 10 bins.
             hist_range(list, optional): Range of the histograms. If empty, will use the minimum and maximum values.
             compute_suv_map(bool, optional): Whether to compute the SUV map for PET scans that do not have SUV values.
+            use_dicoms (bool, optional): Load DICOM files (``.dcm``). Defaults to False.
+            use_niftis (bool, optional): Load NIfTI files (``.nii`` / ``.nii.gz``). Defaults to False.
             save (bool, optional): If True, will save the results in a json file. Defaults to False.
         
         Returns:
@@ -1103,29 +1167,20 @@ class DataManager(object):
                 f"p{max_percentile}": []
             }
             wildcard = wildcards_window[w]
-            if path_data:
-                file_paths = get_file_paths(path_data, wildcard)
-            elif self.paths._path_save:
+            if not path_data and self.paths._path_save:
                 path_data = self.paths._path_save
-                file_paths = get_file_paths(self.paths._path_save, wildcard)
-            else:
-                raise ValueError("Path data is invalid.")
+            file_paths = self.__get_pre_radiomics_file_paths(
+                path_data, wildcard, use_dicoms, use_niftis
+            )
             n_files = len(file_paths)
             i = 0
             for f in tqdm(range(len(file_paths))):
                 try:
-                    if file_paths[f].name.endswith("nii.gz") or file_paths[f].name.endswith("nii"):
-                        if 'ROI' in file_paths[f].name.split("."):
-                            # Skip mask files
-                            continue
-                        medscan = self.__process_one_nifti(file_paths[f], path_data)
-                    elif file_paths[f].name.endswith("dcm"):
-                        medscan = self.process_one_dicom(file_paths[f])
-                    elif file_paths[f].name.endswith("npy"):
-                        with open(file_paths[f], 'rb') as file:
-                            medscan = pickle.load(file)
-                    else:
-                        raise ValueError(f"File {file_paths[f]} is not a valid NIfTI, DICOM or numpy file.")
+                    medscan = self.__load_medscan_for_pre_radiomics_checks(
+                        file_paths[f], path_data, use_dicoms, use_niftis
+                    )
+                    if medscan is None:
+                        continue
                     
                     # Compute SUV map if it's a PET scan without SUV values
                     if compute_suv_map:
@@ -1215,8 +1270,22 @@ class DataManager(object):
                 f"Intensity Range Distribution — {wildcard}  (bin width = {bin_width})",
                 fontsize=13, fontweight='bold', pad=10
             )
-            ax.xaxis.set_ticks(np.arange(hist_range[0], hist_range[1], bin_width, dtype=int))
-            ax.set_xticklabels(ax.get_xticks(), rotation=45, ha='right', fontsize=10)
+            _max_x_ticks = 12
+            if nb_bins <= _max_x_ticks:
+                tick_positions = np.arange(
+                    hist_range[0], hist_range[1] + bin_width / 2, bin_width
+                )
+                ax.set_xticks(tick_positions)
+                ax.set_xticklabels(
+                    [f"{t:g}" for t in tick_positions],
+                    rotation=45, ha='right', fontsize=10
+                )
+            else:
+                ax.xaxis.set_major_locator(MaxNLocator(nbins=_max_x_ticks, min_n_ticks=4))
+                x_formatter = ScalarFormatter(useOffset=False)
+                x_formatter.set_scientific(False)
+                ax.xaxis.set_major_formatter(x_formatter)
+                plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=10)
             ax.xaxis.set_tick_params(pad=5)
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
@@ -1244,17 +1313,23 @@ class DataManager(object):
                     wildcard = str(wildcard).replace('*', '').replace('.npy', '.json')
                     save_json(self.paths._path_save_checks / ('roi_data_' + wildcard), roi_data, cls=NumpyEncoder)
 
-    def pre_radiomics_checks(self,
-                            path_data: Union[str, Path] = None,
-                            wildcards_dimensions: List = [],
-                            wildcards_window: List = [],
-                            path_csv: Union[str, Path] = None,
-                            min_percentile: float = 0.05,
-                            max_percentile: float = 0.95,
-                            bin_width: int = 0,
-                            hist_range: list = [],
-                            nifti: bool = False,
-                            save: bool = False) -> None:
+    def pre_radiomics_checks(
+            self,
+            path_data: Union[str, Path] = None,
+            wildcards_dimensions: List = [],
+            wildcards_window: List = [],
+            path_csv: Union[str, Path] = None,
+            min_percentile: float = 0.05,
+            max_percentile: float = 0.95,
+            bin_width: int = 0,
+            hist_range: list = [],
+            compute_suv_map : bool = False,
+            dimensions_only: bool = False,
+            intensity_only: bool = False,
+            use_dicoms: bool = False,
+            use_niftis: bool = False,
+            save: bool = False
+        ) -> None:
         """Finds proper dimension and re-segmentation ranges options for radiomics analyses. 
 
         The resulting files from this method can then be analyzed and used to set up radiomics 
@@ -1277,12 +1352,23 @@ class DataManager(object):
                 default number of bins in the method 
                 :ref:`pandas.DataFrame.hist <https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.hist.html>`: 10 bins.
             hist_range(list, optional): Range of the histograms. If empty, will use the minimum and maximum values.
-            nifti (bool, optional): Set to True if the scans are nifti files. Defaults to False.
+            compute_suv_map (bool, optional): Whether to compute the SUV map for PET scans that do not have SUV values.
+            dimensions_only (bool, optional): If True, will only perform the dimensions checks. Defaults to False.
+            intensity_only (bool, optional): If True, will only perform the intensity checks. Defaults to False.
+            use_dicoms (bool, optional): Set to True to load DICOM files (``.dcm``). Cannot be used together with ``use_niftis``.
+            use_niftis (bool, optional): Set to True to load NIfTI files (``.nii`` / ``.nii.gz``). Cannot be used together with ``use_dicoms``.
+                If both ``use_dicoms`` and ``use_niftis`` are False, numpy files (``.npy``) are loaded by default.
             save (bool, optional): If True, will save the results in a json file. Defaults to False.
 
         Returns:
             None
         """
+        if dimensions_only and intensity_only:
+            raise ValueError("dimensions_only and intensity_only cannot both be True. Please select one option.")
+
+        if use_dicoms and use_niftis:
+            raise ValueError("use_dicoms and use_niftis cannot both be True. Please select one file format.")
+
         # Initialization
         path_study = Path.cwd()
 
@@ -1305,13 +1391,13 @@ class DataManager(object):
             # Wildcards of groups of files to analyze for dimensions in path_data.
             # See for example: https://www.linuxtechtips.com/2013/11/how-wildcards-work-in-linux-and-unix.html
             # Keep the cell empty if no dimension checks are to be performed.
-            if not wildcards_dimensions:
+            if not intensity_only and not wildcards_dimensions:
                 wildcards_dimensions = []
                 for i in range(len(settings['wildcards_dimensions'])):
                     wildcards_dimensions.append(settings['wildcards_dimensions'][i])
 
             # ROI intensity window checks params
-            if not wildcards_window:
+            if not dimensions_only and not wildcards_window:
                 wildcards_window = []
                 for i in range(len(settings['wildcards_window'])):
                     wildcards_window.append(settings['wildcards_window'][i])
@@ -1339,34 +1425,40 @@ class DataManager(object):
         print('\n\n************************* PRE-RADIOMICS CHECKS *************************', end='')
 
         # 1. PRE-RADIOMICS CHECKS -- DIMENSIONS
-        start1 = time()
-        print('\n--> PRE-RADIOMICS CHECKS -- DIMENSIONS ... ', end='')
-        self.__pre_radiomics_checks_dimensions(
-                                        path_data, 
-                                        wildcards_dimensions, 
-                                        min_percentile, 
-                                        max_percentile,
-                                        save)
-        print('DONE', end='')
-        time1 = f"{time() - start1:.2f}"
-        print(f'\nElapsed time: {time1} sec', end='')
+        if not intensity_only:
+            start1 = time()
+            print('\n--> PRE-RADIOMICS CHECKS -- DIMENSIONS ... ', end='')
+            self.__pre_radiomics_checks_dimensions(
+                                            path_data, 
+                                            wildcards_dimensions, 
+                                            min_percentile, 
+                                            max_percentile,
+                                            use_dicoms,
+                                            use_niftis,
+                                            save)
+            print('DONE', end='')
+            time1 = f"{time() - start1:.2f}"
+            print(f'\nElapsed time: {time1} sec', end='')
 
         # 2. PRE-RADIOMICS CHECKS - WINDOW
-        start2 = time()
-        print('\n\n--> PRE-RADIOMICS CHECKS -- WINDOW ... \n', end='')
-        self.__pre_radiomics_checks_window(
-                                        path_data, 
-                                        wildcards_window, 
-                                        path_csv,
-                                        min_percentile, 
-                                        max_percentile,
-                                        bin_width,
-                                        hist_range,
-                                        nifti,
-                                        save)
-        print('DONE', end='')
-        time2 = f"{time() - start2:.2f}"
-        print(f'\nElapsed time: {time2} sec', end='')
+        if not dimensions_only:
+            start2 = time()
+            print('\n\n--> PRE-RADIOMICS CHECKS -- WINDOW ... \n', end='')
+            self.__pre_radiomics_checks_window(
+                                            path_data, 
+                                            wildcards_window, 
+                                            path_csv,
+                                            min_percentile, 
+                                            max_percentile,
+                                            bin_width,
+                                            hist_range,
+                                            compute_suv_map,
+                                            use_dicoms=use_dicoms,
+                                            use_niftis=use_niftis,
+                                            save=save)
+            print('DONE', end='')
+            time2 = f"{time() - start2:.2f}"
+            print(f'\nElapsed time: {time2} sec', end='')
 
         time_elapsed = f"{time() - start:.2f}"
         print(f'\n\n--> TOTAL TIME FOR PRE-RADIOMICS CHECKS: {time_elapsed} seconds')
