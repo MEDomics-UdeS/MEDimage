@@ -124,7 +124,7 @@ def v_x(
     vox_dim: Union[list, tuple, np.ndarray],
     x: float,
     mask: np.ndarray = None,
-    mask_extension: int = 0,
+    mask_extension: Union[int, float] = 0,
 ) -> float:
     """
     Compute absolute volume receiving at least x Gy.
@@ -176,7 +176,7 @@ def v_x_p(
     vox_dim: Union[list, tuple, np.ndarray],
     x: float,
     mask: np.ndarray,
-    mask_extension: int = 0,
+    mask_extension: Union[int, float] = 0,
 ) -> float:
     """
     Compute volume percentage receiving at least x Gy.
@@ -193,24 +193,53 @@ def v_x_p(
         float: Volume percentage receiving at least x Gy.
     """
     vx_val = v_x(volume=volume, vox_dim=vox_dim, x=x, mask=mask, mask_extension=mask_extension)
-    tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask)
+    tv_val = tv(volume=volume, vox_dim=vox_dim, mask=mask, mask_extension=mask_extension)
     return _safe_divide(vx_val, tv_val) * 100.0  # Return percentage
 
 
-def tv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], mask: np.ndarray) -> float:
+def tv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], mask: np.ndarray, mask_extension: Union[int, float] = 0) -> float:
     """Compute target volume (TV) in cc from ROI mask."""
     _validate_volume(volume)
     _validate_mask(mask, volume)
-    tv_voxels = int(np.count_nonzero(mask > 0))
+
+    # Mask extension logic
+    mask_extension = 0 if mask_extension is None else mask_extension
+    if mask is not None and mask_extension > 0:
+        box_bound = compute_bounding_box(mask=mask)
+        extended_mask = np.zeros_like(mask, dtype=bool)
+
+        
+        if mask_extension < 1:
+            # Percentage based extension
+            new_mask = np.array([
+                [max(0, box_bound[0][0] - int(box_bound[0][0] * mask_extension)), min(mask.shape[0], box_bound[0][1] + int(box_bound[0][1] * mask_extension))],
+                [max(0, box_bound[1][0] - int(box_bound[1][0] * mask_extension)), min(mask.shape[1], box_bound[1][1] + int(box_bound[1][1] * mask_extension))],
+                [max(0, box_bound[2][0] - int(box_bound[2][0] * mask_extension)), min(mask.shape[2], box_bound[2][1] + int(box_bound[2][1] * mask_extension))],
+            ])
+
+        else:
+            # Extend boudning box by the given number of voxels in each direction
+            new_mask = np.array([
+                [max(0, box_bound[0][0] - mask_extension), min(mask.shape[0], box_bound[0][1] + mask_extension)],
+                [max(0, box_bound[1][0] - mask_extension), min(mask.shape[1], box_bound[1][1] + mask_extension)],
+                [max(0, box_bound[2][0] - mask_extension), min(mask.shape[2], box_bound[2][1] + mask_extension)],
+            ])
+        extended_mask[new_mask[0][0]:new_mask[0][1], new_mask[1][0]:new_mask[1][1], new_mask[2][0]:new_mask[2][1]] = 1
+    
+        tv_voxels = int(np.count_nonzero(extended_mask))
+        return float(tv_voxels * _voxel_volume_cc(vox_dim))
+    
+    # No mask extension, compute TV directly from the provided mask
+    tv_voxels = int(np.count_nonzero(mask))
     return float(tv_voxels * _voxel_volume_cc(vox_dim))
 
 
-def piv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask: np.ndarray = None, mask_extension: int = 0) -> float:
+def piv(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask: np.ndarray = None, mask_extension: Union[int, float] = 0) -> float:
     """Compute prescription isodose volume (PIV) in cc over the whole grid."""
     return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose, mask=mask, mask_extension=mask_extension)
 
 
-def piv_half(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask_extension: int = 0) -> float:
+def piv_half(volume: np.ndarray, vox_dim: Union[list, tuple, np.ndarray], presc_dose: float, mask_extension: Union[int, float] = 0) -> float:
     """Compute half-prescription isodose volume (PIV_half) in cc over the whole grid."""
     return v_x(volume=volume, vox_dim=vox_dim, x=presc_dose / 2.0, mask=None, mask_extension=mask_extension)
 
@@ -246,7 +275,7 @@ def gradient_index(
     volume: np.ndarray,
     vox_dim: Union[list, tuple, np.ndarray],
     presc_dose: float,
-    mask_extension: int = 0
+    mask_extension: Union[int, float] = 0
 ) -> float:
     """
     Compute gradient index.
@@ -285,7 +314,7 @@ def extract_all(
     vox_dim: Union[list, tuple, np.ndarray],
     mask: np.ndarray,
     presc_dose: float = None,
-    mask_extension: int = 0,
+    mask_extension: Union[int, float] = 0,
     vx_thresholds: Optional[Union[list, tuple, np.ndarray]] = None,
 ) -> dict:
     """Compute all implemented dosiomics features.
