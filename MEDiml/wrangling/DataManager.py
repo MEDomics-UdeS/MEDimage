@@ -359,9 +359,10 @@ class DataManager(object):
                 idx = n_scans - nb_job_left
                 pd = ProcessDICOM(
                         self.__dicom.cell_path_images[idx], 
-                        self.__dicom.cell_path_rs[idx], 
-                        self.paths._path_save,
-                        self.save)
+                        self.__dicom.cell_path_rs[idx],
+                        self.save,
+                        self.paths._path_save
+                    )
                 ids.extend([pd.process_files()])
                 nb_job_left -= 1
 

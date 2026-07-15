@@ -43,7 +43,7 @@ class ProcessDICOM():
         Returns:
             None.
         """
-        if save and path_save is not None:
+        if save and path_save is None:
             raise ValueError("Please provide a path to save the MEDscan object.")
 
         self.path_images = path_images
