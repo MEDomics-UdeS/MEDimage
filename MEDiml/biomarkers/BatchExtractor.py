@@ -593,6 +593,14 @@ class BatchExtractor(object):
 
             # READING CSV EXPERIMENT TABLE
             tabel_roi = pd.read_csv(self._path_csv / ('roiNames_' + roi_type_label + '.csv'))
+
+            # Check if all the requires columns are present
+            for col in ['PatientID', 'ImagingScanName', 'ImagingModality', 'ROIname']:
+                if col not in list(tabel_roi.columns):
+                    raise ValueError(f'Missing column "{col}" in the ROI CSV file for roi type "{roi_type_label}". \
+                        Please check that the CSV file contains all the required columns: "PatientID", "ImagingScanName", " \
+                        "ImagingModality" and "ROIname".')
+
             tabel_roi['under'] = '_'
             tabel_roi['dot'] = '.'
             tabel_roi['npy'] = '.npy'
@@ -796,7 +804,7 @@ class BatchExtractor(object):
         if ray.is_initialized():
             ray.shutdown()
 
-        ray.init(local_mode=True, include_dashboard=True, num_cpus=self.n_bacth)
+        ray.init(local_mode=True, include_dashboard=False, num_cpus=self.n_bacth)
 
         # Batch all scans from CSV file and compute radiomics for each scan
         self.__batch_all_patients(im_params)

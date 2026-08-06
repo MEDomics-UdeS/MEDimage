@@ -2,10 +2,10 @@ Processing
 ===========================
 
 
-compute\_suv\_map 
+PET SUV map computation
 --------------------------------------------
 
-.. automodule:: MEDiml.processing.compute_suv_map
+.. automodule:: MEDiml.processing.PETSUVConverter
    :members:
    :undoc-members:
    :show-inheritance:
