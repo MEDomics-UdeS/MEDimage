@@ -144,7 +144,7 @@ def get_roi_from_indexes(
         logging.error(message)
         print(message)
 
-        if medscan:
+        if medscan and medscan.params.process.scale_non_text:
             medscan.radiomics.image.update(
                 {('scale'+(str(medscan.params.process.scale_non_text[0])).replace('.', 'dot')): 'ERROR_PROCESSING'})
 

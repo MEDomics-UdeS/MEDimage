@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from copy import deepcopy
 import sys
 import warnings
 from typing import List, Union
@@ -17,6 +18,8 @@ from pathlib import Path
 
 from ..MEDscan import MEDscan
 from ..processing.segmentation import get_roi
+from ..processing.PETSUVConverter import PETSUVConverter
+from ..processing.SUVHeaderProxy import SUVHeaderProxy
 from ..utils.save_MEDscan import save_MEDscan
 
 
@@ -391,8 +394,7 @@ class ProcessDICOM():
         voxels = self.__merge_slice_pixel_arrays(slice_datasets)
         if voxels is None:
             return None, None, None, None
-        transform, rotation, scaling = self.__ijk_to_patient_xyz_transform_matrix(
-            slice_datasets)
+        transform, rotation, scaling = self.__ijk_to_patient_xyz_transform_matrix(slice_datasets)
 
         return voxels, transform, rotation, scaling
 
@@ -425,8 +427,7 @@ class ProcessDICOM():
 
         # IMAGING DATA AND ROI DEFINITION (if applicable)
         # Reading DICOM images and headers
-        dicom_hi = [pydicom.dcmread(str(dicom_file), force=True)
-                for dicom_file in self.path_images]
+        dicom_hi = [pydicom.dcmread(str(dicom_file), force=True) for dicom_file in self.path_images]
 
         try:
             # Determination of the scan orientation
@@ -447,7 +448,17 @@ class ProcessDICOM():
             if not np.allclose(rotation_m, np.eye(rotation_m.shape[0])):
                 medscan.data.volume.scan_rot = rotation_m
 
-            medscan.data.volume.array = voxel_ndarray
+            # Apply SUV conversion if applicable
+            sorted_dicom_hi = self.__sort_by_slice_spacing(dicom_hi)
+            if 'PT' in dicom_hi[0].Modality or 'PET' in dicom_hi[0].Modality:
+                suv_voxel_ndarray = deepcopy(voxel_ndarray)  # Ensure we don't modify the original array
+                for k in range(voxel_ndarray.shape[-1]):
+                    suv_header = self.__get_minimal_suv_header(sorted_dicom_hi[k])
+                    proxy = SUVHeaderProxy(suv_header)
+                    suv_converter = PETSUVConverter(proxy)
+                    suv_voxel_ndarray[:, :, k] = suv_converter.compute(suv_voxel_ndarray[:, :, k])
+
+            medscan.data.volume.array = suv_voxel_ndarray
             medscan.type = dicom_hi[0].Modality + 'scan'
 
             # 7. Creation of imref3d object
@@ -478,11 +489,11 @@ class ProcessDICOM():
 
             # Update the spatial reference in the MEDscan class
             medscan.data.volume.spatialRef = spatial_ref
-            
+
             # DICOM HEADERS OF IMAGING DATA
             dicom_h = [
                 pydicom.dcmread(str(dicom_file),stop_before_pixels=True) for dicom_file in self.path_images
-                ]
+            ]
 
             # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
             medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])

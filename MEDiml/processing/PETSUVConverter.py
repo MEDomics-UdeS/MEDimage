@@ -6,11 +6,15 @@ import logging
 import dateutil.parser
 import numpy as np
 
+from datetime import datetime, timedelta
 
 class PETSUVConverter:
     """
     A class for converting raw PET volumes into Standardized Uptake Value (SUV) maps.
     """
+
+    DATE_FORMAT = "%Y%m%d"
+    DATE_TIME_FORMAT = "%Y%m%d%H%M%S"
 
     def __init__(self, dicom_proxy):
         """
@@ -39,16 +43,33 @@ class PETSUVConverter:
     @property
     def patient_weight_g(self) -> float:
         """Returns patient weight_kg in grams."""
-        return float(self.dcm[0x0010, 0x1030].value) * 1000.0 if (0x0010, 0x1030) in self.dcm else 75000.0
+        if (0x0010, 0x1030) in self.dcm and float(self.dcm[0x0010, 0x1030].value) > 0:
+            weight_kg = float(self.dcm[0x0010, 0x1030].value)
+            return weight_kg * 1000.0
+        elif float(self.dcm[0x0010, 0x1030].value) == 0:
+            raise ValueError("Patient Weight (0010,1030) is zero. Cannot compute SUV.")
+        else:
+            raise KeyError("Patient Weight (0010,1030) is missing. Cannot compute SUV.")
 
     @property
     def patient_height_cm(self) -> float:
         """Returns patient height_m in cm."""
-        return float(self.dcm[0x0010, 0x1020].value) * 100.0 if (0x0010, 0x1020) in self.dcm else 170.0
+        if (0x0010, 0x1020) in self.dcm:
+            height_m = float(self.dcm[0x0010, 0x1020].value)
+            if height_m <= 0:
+                raise ValueError("Patient Height (0010,1020) is zero or negative. Cannot compute SUV.")
+            return height_m * 100.0
+        else:
+            raise KeyError("Patient Height (0010,1020) is missing. Cannot compute SUV.")
 
     @property
     def patient_sex(self) -> str:
-        return str(self.dcm[0x0010, 0x0040].value).upper() if (0x0010, 0x0040) in self.dcm else 'O'
+        if (0x0010, 0x0040) not in self.dcm:
+            raise KeyError("Patient Sex (0010,0040) is missing. Cannot compute SUV.")
+        elif str(self.dcm[0x0010, 0x0040].value).upper() not in ['M', 'F', 'O']:
+            raise ValueError(f"Patient Sex (0010,0040) has an invalid value: {self.dcm[0x0010, 0x0040].value}. Expected 'M', 'F', or 'O'. Cannot compute SUV.")
+        else:
+            return str(self.dcm[0x0010, 0x0040].value).upper()
 
     # ========================================== #
     #              PUBLIC METHODS                #
@@ -172,7 +193,7 @@ class PETSUVConverter:
             frame_duration_sec = float(self.dcm.get(0x00181242)) / 1000.0
             return self._compute_cps(raw_pet / frame_duration_sec)
 
-        raise ValueError("No valid scale factor found for 'cnts' unit in DICOM header.")
+        raise ValueError("No valid scale factor found (SUV scale factor, Activity Concentration Scale Factor or Frame Duration Attribute) for 'cnts' unit in DICOM header.")
 
     def _compute_cps(self, cps_map: np.ndarray) -> np.ndarray:
         corrected_image_tags = self.dcm.get(0x00280051) if 0x00280051 in self.dcm else []
@@ -197,120 +218,173 @@ class PETSUVConverter:
         return self._compute_bqml(bqml_map)
 
     def _compute_bqml(self, raw_pet: np.ndarray) -> np.ndarray:
-        try:
-            def compute_delta_t(acq_date_str, acq_time, inj_time):
-                """
-                Computes the time difference (delta_t) in seconds between radiotracer
-                administration and scan acquisition, handling midnight crossovers.
-                   
-                Returns:
-                    float: delta_t in seconds
-                """
-                from datetime import datetime, timedelta
- 
-                # 1. Get the datetime for Midnight of the Acquisition Date
-                acq_midnight = datetime.strptime(acq_date_str, "%Y%m%d")
-               
-                # 2. Compute the actual Acquisition timestamp
-                acq_dt = acq_midnight + timedelta(seconds=acq_time)
-               
-                # 3. Initially assume Injection happened on the same calendar day
-                inj_dt = acq_midnight + timedelta(seconds=inj_time)
-               
-                # 4. Handle the Crossover (If Injection > Acquisition, it was yesterday)
-                # 86400 is the number of seconds in a 24-hour day
-                if inj_dt > acq_dt:
-                    inj_dt -= timedelta(seconds=86400)
-                   
-                # 5. Return the final difference
-                delta_t = (acq_dt - inj_dt).total_seconds()
-               
-                return delta_t
-            def __get_referencete_time():
-                acquisition_time = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
-                frame_ref_time = self._parse_time(str(self.dcm[0x0054, 0x1300].value)) / 1000.0
-                actual_frame_draution = float(self.dcm.get(0x00181242, 0)) / 1000.0
-                radio_item = self.dcm[0x0054, 0x0016][0]
-                half_life = float(radio_item[0x0018, 0x1075].value)
-                _lambda = np.log(2) / half_life
-                avg_cnt_rate_time = (1 / _lambda) * np.log((_lambda*actual_frame_draution) / (1 - np.exp(-_lambda * actual_frame_draution)))
-                return acquisition_time + avg_cnt_rate_time - frame_ref_time
- 
-            # Acquisition Time
-            scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
+        # Radiopharmaceutical information
+        radio_item = self.dcm[0x0054, 0x0016][0]
 
-            # Radiopharmaceutical information
-            radio_item = self.dcm[0x0054, 0x0016][0]
- 
-            if (0x00181072) not in radio_item and (0x00181078) in radio_item:
-                test = str(radio_item[0x0018, 0x1078].value)
-                injection_time = self._parse_time(str(radio_item[0x0018, 0x1078].value)[8:])
-            elif (0x00181072) in radio_item:    
-                test = str(radio_item[0x00181072].value)    
-                injection_time = self._parse_time(str(radio_item[0x0018, 0x1072].value))
-            else:
-                raise KeyError("Radiopharmaceutical Start Time tags missing.")
- 
-            half_life = float(radio_item[0x0018, 0x1075].value)
-            injected_dose = float(radio_item[0x0018, 0x1074].value)
-            decay_correction = str(self.dcm.get(0x00541102, '')).upper()
-            series_times = self._parse_time(str(self.dcm[0x0008, 0x0031].value))
- 
-            # Decay correction logic
-            if decay_correction == 'ADMIN':
-                injected_dose_decay = injected_dose
-            elif decay_correction == 'START':
+        # Safeguard checks for required DICOM tags
+        if (0x0018, 0x1075) not in radio_item:
+            raise KeyError("Radionuclide Half-Life (0018,1075) is missing.")
+        elif float(radio_item[0x0018, 0x1075].value) < 0:
+            raise ValueError("Radionuclide Half-Life (0018,1075) is negative. Cannot compute SUV.")
+
+        if (0x0018, 0x1074) not in radio_item:
+            raise KeyError("Radionuclide Total Dose (0018,1074) is missing.")
+        elif float(radio_item[0x0018, 0x1074].value) < 0:
+            raise ValueError("Radionuclide Total Dose (0018,1074) is negative. Cannot compute SUV.")
+
+        # Acquisition Time
+        scan_acq_date_time = {
+            'date': str(self.dcm[0x0008, 0x0022].value), 
+            'time': self._parse_time('111000.000000')
+        }
+
+        # Radiopharmaceutical Start DateTime
+        rpsdt = None
+        if (0x00181078) in radio_item:
+            rpsdt = {
+                "date": radio_item[0x0018, 0x1078].value[:8],
+                "time": self._parse_time(radio_item[0x0018, 0x1078].value[8:])
+            }
+
+        # Radiopharmaceutical Start Time
+        if (0x00181072) in radio_item:
+            if float(radio_item[0x0018, 0x1072].value) < 0:
+                raise ValueError("Radiopharmaceutical Start Time (0018,1072) is negative. Cannot compute SUV.")
+            rpst = self._parse_time(str(radio_item[0x0018, 0x1072].value))
+
+        if (0x00181078) not in radio_item and (0x00181072) not in radio_item:
+            raise KeyError("Neither Radiopharmaceutical Start DateTime (0018,1078) nor Radiopharmaceutical Start Time (0018,1072) is present. Cannot compute SUV.")
+
+        # Radionuclide Half Life
+        half_life = float(radio_item[0x0018, 0x1075].value)
+        _lambda = np.log(2) / half_life
+
+        # Administered dose of the radionuclide
+        injected_dose = float(radio_item[0x0018, 0x1074].value)
+
+        # Decay correction attribute
+        decay_correction = str(self.dcm.get(0x00541102, '')).upper()
+
+        # Series date and time
+        series_date_time = {
+            'date': str(self.dcm[0x0008, 0x0021].value), 
+            'time': self._parse_time(str(self.dcm[0x0008, 0x0031].value))
+        }
+
+        # Decay correction logic
+        if decay_correction == 'ADMIN':
+            injected_dose_decay = injected_dose
+            return raw_pet * self.patient_weight_g / injected_dose_decay
+        else:
+            t_ref = None # decay-correction reference datetime
+            t_adm = None # radiopharmaceutical administration datetime
+            if decay_correction == 'START':
                 manufacturer = str(self.dcm[0x0008, 0x0070].value).lower()
-                if 'siemens' in manufacturer:
-                    private_scan_datetime = -1.0
-                    if 0x00711022 in self.dcm:
-                        private_scan_datetime = self._parse_time(str(self.dcm.get(0x00711022, None)))
-                    if private_scan_datetime < 0:
-                        if series_times != scantime:
-                            scantime = __get_referencete_time()
-                        else:
-                            scantime = series_times
-                elif 'philips' in manufacturer and scantime != series_times:
-                    scantime = __get_referencete_time()
-                elif 'ge' in manufacturer and scantime != series_times:
-                    if 0x0009100D in self.dcm:
-                        scantime = self._parse_time(str(self.dcm[0x0009100D].value))
-                    else:
-                        scantime = -1.0
-                    if scantime < 0:
+                # If the manufacturer is Siemens or GE, we can use their private tag Decay Correction DateTime (0071,1022)
+                if 'siemens' in manufacturer and 0x00711022 in self.dcm:
+                    t_ref = {
+                        'date': str(self.dcm[0x0071, 0x1022].value)[:8],
+                        'time': self._parse_time(str(self.dcm[0x0071, 0x1022].value)[8:])
+                    }
+                # If the manufacturer is GE, we can use their private tag GEDecayCorrectionDateTime (0009,100D)
+                elif 'ge' in manufacturer and 0x0009100D in self.dcm:
+                    t_ref = {
+                        'date': str(self.dcm[0x0009100D].value)[:8],
+                        'time': self._parse_time(str(self.dcm[0x0009100D].value)[8:])
+                    }
+                elif ('siemens' in manufacturer and 0x00711022 not in self.dcm) or \
+                      ('ge' in manufacturer and 0x0009100D not in self.dcm) or \
+                        ('ge' not in manufacturer and 'siemens' not in manufacturer):
+                    if series_date_time != scan_acq_date_time:
+                        if 0x00181242 not in self.dcm:
+                            raise KeyError("Frame Duration (0018,1242) is required for 'NONE' decay correction but is missing.")
+                        frame_durantion_sec = float(self.dcm.get(0x00181242, 0)) / 1000.0
+                        if (0x0054, 0x1300) not in self.dcm:
+                            raise KeyError("Frame Reference Time (0054,1300) is missing.")
                         frame_ref_time = self._parse_time(str(self.dcm[0x0054, 0x1300].value)) / 1000.0
-                        scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value)) - frame_ref_time
-                else:
-                    scantime = self._parse_time(str(self.dcm[0x0008, 0x0032].value))
-                delta_t = scantime - injection_time
-                if injection_time > scantime:
-                    delta_t = compute_delta_t('20250102', scantime, injection_time)
-                decay = np.exp(-np.log(2) * (delta_t) / half_life)
-                injected_dose_decay = injected_dose * decay
+                        if 'ge' in manufacturer:
+                            if frame_ref_time < 0:
+                                raise ValueError("Frame Reference Time (0054,1300) is negative. Cannot compute SUV.")
+                            t_ref = {
+                                'date': scan_acq_date_time['date'],
+                                'time': scan_acq_date_time['time'] - frame_ref_time
+                            }
+                        else:
+                            if frame_durantion_sec > 0 and frame_ref_time >= 0:
+                                # average count rate time in seconds
+                                _lambda = np.log(2) / half_life
+                                t_ave = (1 / _lambda) * np.log((_lambda*frame_durantion_sec) / (1 - np.exp(-_lambda * frame_durantion_sec)))
+                                t_ref = {
+                                    'date': scan_acq_date_time['date'],
+                                    'time': scan_acq_date_time['time'] - frame_ref_time + t_ave
+                                }
+                            else:
+                                raise ValueError("Frame Duration (0018,1242) or Frame Reference Time (0054,1300) is negative. Cannot compute SUV.")
+                    else:
+                        t_ref = scan_acq_date_time
             elif decay_correction == 'NONE':
-                _lambda = np.log(2) / half_life
-                injected_dose_decay = injected_dose * np.exp(-_lambda * (scantime - injection_time))
                 if 0x00181242 not in self.dcm:
                     raise KeyError("Frame Duration (0018,1242) is required for 'NONE' decay correction but is missing.")
                 frame_durantion_sec = float(self.dcm.get(0x00181242, 0)) / 1000.0
-                factor = (_lambda * frame_durantion_sec) / (1 - np.exp(-_lambda * frame_durantion_sec))
-                delta_t = scantime - injection_time
-                if injection_time > scantime:
-                    delta_t = compute_delta_t('20250102', scantime, injection_time)
-                injected_dose_decay = injected_dose * (1 / factor) * np.exp(-_lambda * (delta_t))
+                if frame_durantion_sec <= 0:
+                    raise ValueError("Frame Duration (0018,1242) is zero or negative. Cannot compute SUV.")
+                if half_life <= 0:
+                    raise ValueError("Radionuclide Half Life (0018,1075) is zero or negative. Cannot compute SUV.")
+                t_ave = (1 / _lambda) * np.log((_lambda*frame_durantion_sec) / (1 - np.exp(-_lambda * frame_durantion_sec)))
+                t_ref = {
+                    'date': scan_acq_date_time['date'],
+                    'time': scan_acq_date_time['time'] + t_ave
+                }
             else:
                 raise ValueError(f"Unrecognized decay correction status: {decay_correction}")
 
-            raw_pet = raw_pet * self.patient_weight_g / injected_dose_decay
+            if rpsdt:
+                # Ensure Radiopharmaceutical Start DateTime (0018,1078) is higher or equal to -3600s 
+                # and shorter than twice the Radionuclide Half Life (0018,1075)
+                if (-3600 <= self.dt_difference_in_seconds(scan_acq_date_time, rpsdt) < 2 * half_life):
+                    t_adm = rpsdt
+                else:
+                    rpst = rpsdt['time']
+                    # arbitrary half-life threshold
+                    if half_life < 41400:
+                        if (t_ref['time'] - rpst) < -3600:
+                            # lower than -3,600s, 24 hours should be subtracted from the resulting datetime
+                            t_adm = {
+                                "date": self.subtract_days(t_ref['date'], 1), 
+                                "time": rpst
+                            }
+                        else:
+                            t_adm = {
+                                "date": t_ref['date'], 
+                                "time": rpst
+                            }
+                    else:
+                        raise ValueError("Radiopharmaceutical Start DateTime (0018,1078) is unavailable and \
+                            the Radionuclide Half Life (0018,1075) is over than 41,400s. Cannot compute SUV.")
+            else:
+                # arbitrary half-life threshold
+                if half_life < 41400:
+                    if (t_ref['time'] - rpst) < -3600:
+                        # lower than -3,600s, 24 hours should be subtracted from the resulting datetime
+                        t_adm = {
+                            "date": self.subtract_days(t_ref['date'], 1), 
+                            "time": rpst
+                        }
+                    else:
+                        t_adm = {
+                            "date": t_ref['date'], 
+                            "time": rpst
+                        }
+                else:
+                    raise ValueError("Radiopharmaceutical Start DateTime (0018,1078) is unavailable and \
+                        the Radionuclide Half Life (0018,1075) is over than 41,400s. Cannot compute SUV.")
 
-            # Convert MBq to Bq if necessary
-            if (np.any(raw_pet > 0) and np.nanmean(raw_pet[raw_pet > 0]) > 100):
-                raw_pet = raw_pet / 1_000_000.0
+        injected_dose_decay = injected_dose * np.exp(-_lambda * (self.dt_difference_in_seconds(t_ref, t_adm)))
+        raw_pet = raw_pet * self.patient_weight_g / injected_dose_decay
 
-        except Exception as e:
-            self.logger.warning(f"Error computing BQML ({e}). Using standard 1.75h fallback decay.")
-            decay = np.exp(-np.log(2) * (1.75 * 3600) / 6588)
-            raw_pet = raw_pet * self.patient_weight_g / (420000000 * decay)
+        # Convert MBq to Bq if necessary
+        if (np.any(raw_pet > 0) and np.nanmean(raw_pet[raw_pet > 0]) > 100):
+            raw_pet = raw_pet / 1_000_000.0
 
         return raw_pet
 
@@ -326,3 +400,37 @@ class PETSUVConverter:
         time_str = str(time_str).zfill(6)
         hh, mm, ss = float(time_str[0:2]), float(time_str[2:4]), float(time_str[4:6])
         return hh * 3600.0 + mm * 60.0 + ss
+
+    @staticmethod
+    def to_date(date_str):
+        """Convert 'YYYYMMDD' string to a datetime object."""
+        return datetime.strptime(date_str, PETSUVConverter.DATE_FORMAT)
+
+    @staticmethod
+    def to_string(date_obj):
+        """Convert a datetime object back to 'YYYYMMDD'."""
+        return date_obj.strftime(PETSUVConverter.DATE_FORMAT)
+
+    @staticmethod
+    def add_days(date_str, days):
+        """Add (or subtract) a number of days."""
+        return PETSUVConverter.to_string(PETSUVConverter.to_date(date_str) + timedelta(days=days))
+
+    @staticmethod
+    def subtract_days(date_str, days):
+        """Subtract a number of days."""
+        return PETSUVConverter.add_days(date_str, -days)
+
+    @staticmethod
+    def dt_difference_in_seconds(date_time1, date_time2):
+        """Calculate the difference in seconds between two datetime objects.
+        WARNING: This computes the difference as date_time1 - date_time2, so if date_time1 is earlier than date_time2, the result will be negative.
+        """
+        def to_datetime(d):
+            date = datetime.strptime(d["date"], PETSUVConverter.DATE_FORMAT)
+            return date + timedelta(seconds=d["time"])
+
+        dt1 = to_datetime(date_time1)
+        dt2 = to_datetime(date_time2)
+
+        return (dt1 - dt2).total_seconds()
