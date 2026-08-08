@@ -319,13 +319,29 @@ class DataManager(object):
                         self.save)
             for i in range(n_batch)]
         
-        ids = [pd.process_files() for pd in pds]
+        processed = [pd.process_files() for pd in pds]
+
+        nb_job_left = n_scans - n_batch
+
+        # Distribute the remaining tasks
+        for _ in trange(nb_job_left):
+            idx = n_scans - nb_job_left
+            pd = ProcessDICOM(
+                    self.__dicom.cell_path_images[idx], 
+                    self.__dicom.cell_path_rs[idx],
+                    self.save,
+                    self.paths._path_save
+                )
+            processed.extend([pd.process_files()])
+
+        # Drop empty results (in case of errors)
+        processed = [result for result in processed if result]
 
         # Update the path to the created instances
         if self.save:
-            for name_save in ray.get(ids):
+            for name_save in processed:
                 if self.paths._path_save:
-                    self.path_to_objects.append(str(self.paths._path_save / name_save))
+                    self.path_to_objects.extend(str(self.paths._path_save / name_save))
                 # Update processing summary
                 if name_save.split('_')[0].count('-') >= 2:
                     scan_type = name_save[name_save.find('__')+2 : name_save.find('.')]
@@ -346,53 +362,9 @@ class DataManager(object):
                 else:
                     logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
                         "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
+        else:
+            return processed
 
-        nb_job_left = n_scans - n_batch
-
-        if not self.save:
-            return ray.get(ids)
-
-        # Distribute the remaining tasks
-        for _ in trange(n_scans):
-            _, ids = ray.wait(ids, num_returns=1)
-            if nb_job_left > 0:
-                idx = n_scans - nb_job_left
-                pd = ProcessDICOM(
-                        self.__dicom.cell_path_images[idx], 
-                        self.__dicom.cell_path_rs[idx],
-                        self.save,
-                        self.paths._path_save
-                    )
-                ids.extend([pd.process_files()])
-                nb_job_left -= 1
-
-            # Update the path to the created instances
-            if self.save:
-                for name_save in ray.get(ids):
-                    if self.paths._path_save:
-                        self.path_to_objects.extend(str(self.paths._path_save / name_save))
-                    # Update processing summary
-                    if name_save.split('_')[0].count('-') >= 2:
-                        scan_type = name_save[name_save.find('__')+2 : name_save.find('.')]
-                        if name_save.split('-')[0] not in self.__studies:
-                            self.__studies.append(name_save.split('-')[0])  # add new study
-                        if name_save.split('-')[1] not in self.__institutions:
-                            self.__institutions.append(name_save.split('-')[1])  # add new study
-                        if name_save.split('-')[0] not in self.summary:
-                            self.summary[name_save.split('-')[0]] = {}
-                        if name_save.split('-')[1] not  in self.summary[name_save.split('-')[0]]:
-                            self.summary[name_save.split('-')[0]][name_save.split('-')[1]] = {}  # add new institution
-                        if scan_type not in self.__scans:
-                            self.__scans.append(scan_type)
-                        if scan_type not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]]:
-                            self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type] = []
-                        if name_save not in self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type]:
-                            self.summary[name_save.split('-')[0]][name_save.split('-')[1]][scan_type].append(name_save)
-                    else:
-                        logging.warning(f"The patient ID of the following file: {name_save} does not respect the MEDiml "\
-                            "naming convention 'study-institution-id' (Ex: Glioma-TCGA-001)")
-            else:
-                return ray.get(ids)
         print('DONE')
 
     def __read_all_niftis(self) -> None:
