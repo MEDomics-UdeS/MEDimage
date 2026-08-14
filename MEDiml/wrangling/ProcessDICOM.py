@@ -461,7 +461,7 @@ class ProcessDICOM():
                 medscan.data.volume.array = suv_voxel_ndarray
 
                 # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
-                medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])
+                medscan.dicomH = self.__get_minimal_suv_header(dicom_hi[0])
             else:
                 medscan.data.volume.array = voxel_ndarray
             medscan.type = dicom_hi[0].Modality + 'scan'
