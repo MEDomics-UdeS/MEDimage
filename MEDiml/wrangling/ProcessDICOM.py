@@ -458,7 +458,12 @@ class ProcessDICOM():
                     suv_converter = PETSUVConverter(proxy)
                     suv_voxel_ndarray[:, :, k] = suv_converter.compute(suv_voxel_ndarray[:, :, k])
 
-            medscan.data.volume.array = suv_voxel_ndarray
+                medscan.data.volume.array = suv_voxel_ndarray
+
+                # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
+                medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])
+            else:
+                medscan.data.volume.array = voxel_ndarray
             medscan.type = dicom_hi[0].Modality + 'scan'
 
             # 7. Creation of imref3d object
@@ -494,9 +499,6 @@ class ProcessDICOM():
             dicom_h = [
                 pydicom.dcmread(str(dicom_file),stop_before_pixels=True) for dicom_file in self.path_images
             ]
-
-            # Save the minimal header required for SUV conversion and PET scaling in the MEDscan class
-            medscan.dicomH = self.__get_minimal_suv_header(dicom_h[0])
 
             # DICOM RTstruct (if applicable)
             if self.path_rs is not None and len(self.path_rs) > 0:

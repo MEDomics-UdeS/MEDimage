@@ -313,10 +313,10 @@ class DataManager(object):
 
         # Distribute the first tasks to all workers
         pds = [ProcessDICOM(
-                        self.__dicom.cell_path_images[i], 
-                        self.__dicom.cell_path_rs[i], 
-                        self.paths._path_save,
-                        self.save)
+                        path_images=self.__dicom.cell_path_images[i], 
+                        path_rs=self.__dicom.cell_path_rs[i], 
+                        path_save=self.paths._path_save,
+                        save=self.save)
             for i in range(n_batch)]
         
         processed = [pd.process_files() for pd in pds]
@@ -327,10 +327,10 @@ class DataManager(object):
         for _ in trange(nb_job_left):
             idx = n_scans - nb_job_left
             pd = ProcessDICOM(
-                    self.__dicom.cell_path_images[idx], 
-                    self.__dicom.cell_path_rs[idx],
-                    self.save,
-                    self.paths._path_save
+                    path_images=self.__dicom.cell_path_images[idx], 
+                    path_rs=self.__dicom.cell_path_rs[idx],
+                    path_save=self.paths._path_save,
+                    save=self.save
                 )
             processed.extend([pd.process_files()])
 
