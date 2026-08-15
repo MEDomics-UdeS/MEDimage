@@ -235,7 +235,7 @@ class PETSUVConverter:
         # Acquisition Time
         scan_acq_date_time = {
             'date': str(self.dcm[0x0008, 0x0022].value), 
-            'time': self._parse_time('111000.000000')
+            'time': self._parse_time(self.dcm[0x0008, 0x0032].value)
         }
 
         # Radiopharmaceutical Start DateTime
