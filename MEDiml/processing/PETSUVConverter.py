@@ -8,6 +8,82 @@ import numpy as np
 
 from datetime import datetime, timedelta
 
+
+def parse_time(time_str):
+        """Parse a DICOM time string into a datetime object."""
+        if isinstance(time_str, bytes):
+            time_str = time_str.decode("utf-8").strip()
+
+        for fmt in ("%H%M%S.%f", "%H%M%S", "%Y%m%d%H%M%S.%f", "%Y%m%d%H%M%S"):
+            try:
+                return datetime.strptime(time_str, fmt)
+            except ValueError:
+                continue
+            except TypeError:
+                continue
+        raise ValueError(f"Time data '{time_str}' does not match expected formats")
+
+def calc_elapsed_time(dcm, decay_constant, acquisition_time, injection_time):
+    frame_reference_time = float(dcm[0x0054, 0x1300].value) / 1000
+    decay_during_frame = decay_constant * dcm.get(0x00181242) / 1000
+    avg_count_rate_time = (1 / decay_constant) * np.log(decay_during_frame / (1 - np.exp(-decay_during_frame)))
+
+    return (acquisition_time - injection_time).total_seconds() + avg_count_rate_time - frame_reference_time
+
+def get_injection_time(dcm):
+    try:
+        return parse_time(dcm[0x0054, 0x0016][0][0x0018, 0x1072].value)
+    except AttributeError:
+        return parse_time(dcm[0x0054, 0x0016][0][0x0018, 0x1078].value)
+
+def get_tracer_name(rph_item):
+    value = getattr(rph_item, "Radiopharmaceutical", None)
+    if value is None and (0x0018, 0x0031) in rph_item:
+        value = rph_item[(0x0018, 0x0031)].value
+    return str(value) if value is not None else None
+
+def get_datetime_on_injection_day(time_value, injection_time):
+    return parse_time(time_value).replace(
+        year=injection_time.year,
+        month=injection_time.month,
+        day=injection_time.day,
+    )
+
+def compute_elapsed_time_for_start_decay_correction(dcm, injection_time, decay_constant):
+    manufacturer = str(dcm[0x0008, 0x0070].value).lower()
+
+    acquisition_time = get_datetime_on_injection_day(str(dcm[0x0008, 0x0032].value), injection_time)
+    series_time = get_datetime_on_injection_day(str(dcm[0x0008, 0x0031].value), injection_time)
+
+    if "philips" in manufacturer:
+        if acquisition_time == series_time:
+            return (acquisition_time - injection_time).total_seconds()
+        return calc_elapsed_time(dcm, decay_constant, acquisition_time, injection_time)
+
+    if "siemens" in manufacturer or "cps" in manufacturer or "cti" in manufacturer:
+        try:
+            private_time = get_datetime_on_injection_day(dcm[(0x0071, 0x1022)].value, injection_time)
+            return (private_time - injection_time).total_seconds()
+        except (KeyError, TypeError):
+            if acquisition_time == series_time:
+                return (acquisition_time - injection_time).total_seconds()
+            return calc_elapsed_time(dcm, decay_constant, acquisition_time, injection_time)
+
+    if "GE" in manufacturer:
+        try:
+            private_time = get_datetime_on_injection_day(dcm[(0x0009, 0x100D)].value, injection_time)
+            return (private_time - injection_time).total_seconds()
+        except (KeyError, TypeError):
+            if acquisition_time == series_time:
+                return (acquisition_time - injection_time).total_seconds()
+            frame_reference_time = float(dcm[0x0054, 0x1300].value) / 1000.0
+            return (acquisition_time - injection_time).total_seconds() - frame_reference_time
+
+    if acquisition_time == series_time:
+        return (acquisition_time - injection_time).total_seconds()
+    return calc_elapsed_time(dcm, decay_constant, acquisition_time, injection_time)
+
+
 class PETSUVConverter:
     """
     A class for converting raw PET volumes into Standardized Uptake Value (SUV) maps.
@@ -301,7 +377,7 @@ class PETSUVConverter:
                         frame_durantion_sec = float(self.dcm.get(0x00181242, 0)) / 1000.0
                         if (0x0054, 0x1300) not in self.dcm:
                             raise KeyError("Frame Reference Time (0054,1300) is missing.")
-                        frame_ref_time = self._parse_time(str(self.dcm[0x0054, 0x1300].value)) / 1000.0
+                        frame_ref_time = float(self.dcm[0x0054, 0x1300].value) / 1000.0
                         if 'ge' in manufacturer:
                             if frame_ref_time < 0:
                                 raise ValueError("Frame Reference Time (0054,1300) is negative. Cannot compute SUV.")
@@ -383,7 +459,7 @@ class PETSUVConverter:
         raw_pet = raw_pet * self.patient_weight_g / injected_dose_decay
 
         # Convert MBq to Bq if necessary
-        if (np.any(raw_pet > 0) and np.nanmean(raw_pet[raw_pet > 0]) > 100):
+        if (np.any(raw_pet > 0) and np.nanmean(raw_pet[raw_pet > 0]) >= 10000):
             raw_pet = raw_pet / 1_000_000.0
 
         return raw_pet
