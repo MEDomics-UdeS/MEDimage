@@ -33,29 +33,26 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
         self.selected_features_ = None
 
     def fit(self, X, y):
-        # 1. Standardize input format (ensure DataFrame)
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
         
-        # 2. Call your existing logic 
-        # Note: I am assuming 'intersect_var_tables' and 'finalize_rad_table' 
-        # are available in your namespace.
+        # Ensure y is a DataFrame for merging in PyCaret logic
+        if not isinstance(y, pd.DataFrame):
+            y = pd.DataFrame(y)
+
         results, self.classifier_ = self._train_logic(X, y)
         
-        # 3. Store results for sklearn
         self.model_info_ = results
         self.selected_features_ = results['var_names']
-        self.selected_features_definitions_ = results['var_def']
+        self.selected_features_definitions_ = results.get('var_def')
         self.classes_ = np.unique(y)
         
         return self
 
     def predict(self, X):
-        # Safety check
-        if self.selected_features_ is None or self.selected_features_definitions_ is None or self.features_names_in_ is None:
-            raise ValueError("Model has no selected features or definitions. " \
-            "Ensure that fit() has been called successfully before predict().")
-        # Apply the threshold stored in model_info_
+        if self.classifier_ is None:
+            raise ValueError("Model has not been fitted yet.")
+        
         probas = self.predict_proba(X)
         threshold = self.model_info_.get('threshold', 0.5)
         return (probas >= threshold).astype(int)
@@ -64,9 +61,8 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
 
-        # Important: Filter X to only include features selected during fit
-        features_names = self.selected_features_ or self.selected_features_definitions_ or self.features_names_in_
-        X_filtered = X[features_names]
+        # Filter X to include only features selected during fit
+        X_filtered = X[self.selected_features_]
         return self.classifier_.predict_proba(X_filtered)[:, 1]
 
     def _train_logic(self, var_table_train, outcome_table_binary_train):
@@ -133,35 +129,20 @@ class XGBoostEstimator(BaseEstimator, ClassifierMixin):
         
         return model_xgb, classifier
 
-    def __find_balanced_threshold(
-            self,
-            model: object, 
-            variable_table: pd.DataFrame, 
-            outcome_table_binary: pd.DataFrame
-        ) -> float:
-        """
-        Finds the balanced threshold for the given machine learning test.
+    def __find_balanced_threshold(self, model, variable_table, outcome_table_binary) -> float:
+        # Align features
+        if hasattr(model, 'feature_names_in_'):
+            variable_table = variable_table[list(model.feature_names_in_)]
 
-        Args:
-            model (XGBClassifier): Trained XGBoost classifier for the given machine learning run.
-            variable_table (pd.DataFrame): Radiomics table.
-            outcome_table_binary (pd.DataFrame): Outcome table with binary labels.
+        # Get probabilities
+        y_probs = model.predict_proba(variable_table)[:, 1]
         
-        Returns:
-            float: Balanced threshold for the given machine learning test.
-        """
-        # Check is there is a feature mismatch
-        if model.feature_names_in_.shape[0] != variable_table.columns.shape[0]:
-            variable_table = variable_table.loc[:, model.feature_names_in_]
+        # ROC Calculation
+        fpr, tpr, thresholds = metrics.roc_curve(outcome_table_binary.iloc[:, 0], y_probs)
 
-        # Getting the probability responses for each patient
-        patient_ids = list(variable_table.index.values)
-        prob_xgb = self.predict(variable_table.loc[patient_ids, :])
-
-        # Calculating the ROC curve
-        fpr, tpr, thresholds = metrics.roc_curve(outcome_table_binary.iloc[:, 0], prob_xgb)
-
-        # Calculating the optimal threshold by minizing fpr (false positive rate) and maximizing tpr (true positive rate)
-        minimum = np.argmin(np.power(fpr, 2) + np.power(1-tpr, 2))
+        # Geometric optimization (closest to top-left corner)
+        # Distance = sqrt( fpr^2 + (1-tpr)^2 )
+        dist = np.sqrt(np.power(fpr, 2) + np.power(1 - tpr, 2))
+        best_idx = np.argmin(dist)
         
-        return thresholds[minimum]
+        return thresholds[best_idx]
