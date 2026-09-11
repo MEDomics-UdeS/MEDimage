@@ -104,10 +104,13 @@ normalization:
 # 5. MODELING
 # -----------------------------------------------------------------------------
 modeling:
-  method: "rf"
+  method: "rf" # Any PyCaret classification model ID ("xgboost", "rf", "lr", "dt", "lightgbm", ...),
+               # or "best" to auto-select via PyCaret's compare_models(), e.g.:
+               # method: "best"
+               # best_include: ["rf", "xgboost", "lightgbm", "lr"]
   optimization_metric: "AUC"
   cv_folds: 5
-  var_importance_threshold: 0.05
+  n_features_to_select: 0.5
   optimize_threshold: True
   useGPU: True
   nameSave: "rf_5perc_CECT"

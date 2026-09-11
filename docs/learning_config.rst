@@ -129,13 +129,18 @@ Defines the algorithm and hyperparameter optimization settings.
 .. code-block:: yaml
 
    modeling:
-     method: "firth" # Options: "firth", "rf", "xgboost"
+     method: "xgboost" # Any PyCaret classification model ID ("xgboost", "rf", "lr", "dt", "lightgbm",
+                        # "catboost", ...), or "best" to auto-select via PyCaret's compare_models()
      optimization_metric: "MCC"
      cv_folds: 5
-     var_importance_threshold: 0.05
+     n_features_to_select: 0.5 # If < 1, interpreted as a fraction of features to keep; if >= 1, interpreted as the number of features to keep.
+     feature_selection_estimator: "lightgbm" # Optional. Model used by PyCaret for setup()'s feature selection step.
+     create_model_kwargs: {} # Optional. Extra kwargs forwarded to PyCaret's create_model(), e.g. {class_weight: "balanced"}
+     best_include: null # Optional. Restricts compare_models() to this list of model IDs when method is "best"
+     best_exclude: null # Optional. Excludes these model IDs from compare_models() when method is "best"
 
 .. note::
-   For rare-event studies (e.g., only 5 positive cases), it is highly recommended to use the ``firth`` method or a ``Random Forest`` with ``class_weight='balanced'``.
+   For rare-event studies (e.g., only 5 positive cases), it is highly recommended to use a ``Random Forest`` (or any model) with ``create_model_kwargs: {class_weight: "balanced"}``.
 
 Full Configuration Example
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -214,7 +219,7 @@ Below is a complete example of a ``config.yaml`` file incorporating all the sect
        seed: *global_seed
 
    modeling:
-     method: "firth"
+     method: "xgboost"
      optimization_metric: "MCC"
      cv_folds: 5
-     var_importance_threshold: 0.05
+     n_features_to_select: 0.5

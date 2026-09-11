@@ -544,15 +544,21 @@ def feature_importance_analysis(path_results: Path):
         pipeline = joblib.load(list_models[0])
 
         # Extract feature names and importances
-        if hasattr(pipeline, 'estimator_') \
-            and hasattr(pipeline.estimator_, 'model_info_') \
-            and hasattr(pipeline.estimator_, 'classifier_') \
-            and hasattr(pipeline.estimator_.classifier_, 'feature_importances_'):
+        classifier = getattr(pipeline.estimator_, 'classifier_', None) if hasattr(pipeline, 'estimator_') else None
+        if hasattr(classifier, 'feature_importances_'):
+            importances = classifier.feature_importances_
+        elif hasattr(classifier, 'coef_'):
+            # Models without feature_importances_ (e.g. logistic regression, linear SVM) expose coef_ instead
+            importances = np.abs(np.ravel(classifier.coef_))
+        else:
+            importances = None
+
+        if importances is not None \
+            and hasattr(pipeline.estimator_, 'model_info_'):
             variables = get_full_rad_names(
-                pipeline.estimator_.model_info_['var_info']['variables']['var_def'], 
+                pipeline.estimator_.model_info_['var_info']['variables']['var_def'],
                 pipeline.estimator_.model_info_['var_names']
             )
-            importances = pipeline.estimator_.classifier_.feature_importances_
 
             # Accumulate importance values for each variable
             for index, var_path in enumerate(variables):

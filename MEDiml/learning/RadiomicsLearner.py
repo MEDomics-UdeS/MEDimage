@@ -235,8 +235,10 @@ class RadiomicsLearner:
         Args:
             path_ml (Path): Path to the main dictionary containing info about the ml current experiment.
             holdout_test (bool, optional): Boolean specifying if the hold-out test should be performed.
-            model (str, optional): Model for model training. Defaults to 'xgboost'.
-                This parameter is used only if the ml dictionary does not contain the "model" key in the "modeling" section.
+            model (str, optional): Any PyCaret classification model ID (e.g. 'xgboost', 'rf', 'lr', 'dt',
+                'lightgbm', ...), or 'best' to auto-select the best model via PyCaret's compare_models().
+                Defaults to 'xgboost'. This parameter is used only if the ml dictionary does not contain
+                the "method" key in the "modeling" section.
         Returns:
             None.
         """
@@ -297,7 +299,7 @@ class RadiomicsLearner:
 
         # Initializing the model settings
         algorithm = ml['modeling']['method'] if 'method' in ml['modeling'].keys() else model
-        var_importance_threshold = ml['modeling']['var_importance_threshold']
+        n_features_to_select = ml['modeling']['n_features_to_select']
         optimize_threshold = ml['modeling']['optimize_threshold']
         optimization_metric = ml['modeling']['optimization_metric']
         use_gpu = ml['modeling']['useGPU'] if 'useGPU' in ml['modeling'].keys() else True
@@ -311,11 +313,15 @@ class RadiomicsLearner:
         estimator = Estimator(
             algorithm=algorithm,
             ml_config={
-            'var_importance_threshold': var_importance_threshold,
+            'n_features_to_select': n_features_to_select,
             'optimize_threshold': optimize_threshold,
             'optimization_metric': optimization_metric,
             'use_gpu': use_gpu,
-            'seed': seed
+            'seed': seed,
+            'feature_selection_estimator': ml['modeling'].get('feature_selection_estimator', 'lightgbm'),
+            'create_model_kwargs': ml['modeling'].get('create_model_kwargs'),
+            'best_include': ml['modeling'].get('best_include'),
+            'best_exclude': ml['modeling'].get('best_exclude')
         })
         estimator.fit(var_table_train, outcome_table_binary_train)
 
@@ -556,9 +562,10 @@ class RadiomicsLearner:
         Args:
             holdout_test (bool, optional): Boolean specifying if the hold-out test should be performed.
             model (str, optional): String specifying the model to use to train the model.
-                - "xgboost": Use XGBoost to train the model.
-                - "rf": Use Random Forest to train the model.
-            finalize (bool, optional): Boolean specifying if a final model should be trained on the full learning set 
+                - Any PyCaret classification model ID, e.g. "xgboost", "rf", "lr", "dt", "lightgbm", "catboost", etc.
+                - "best": Auto-select the best model via PyCaret's compare_models() (see `best_include`/
+                  `best_exclude` in the "modeling" config section), then tune it.
+            finalize (bool, optional): Boolean specifying if a final model should be trained on the full learning set
                 and tested on the holdout set. The final model will be trained
 
         Returns:

@@ -1,7 +1,6 @@
 from sklearn.base import BaseEstimator, ClassifierMixin
 
-from ..utils.rf_learner import RandomForestEstimator
-from ..utils.xgboost_learner import XGBoostEstimator
+from ..utils.pycaret_learner import PyCaretEstimator
 
 
 class Estimator(BaseEstimator, ClassifierMixin):
@@ -11,13 +10,13 @@ class Estimator(BaseEstimator, ClassifierMixin):
         self.estimator_ = None
 
     def _initialize_estimator(self):
-        """Factory algorithm to select the right internal class."""
-        if self.algorithm == 'xgboost':
-            return XGBoostEstimator(**self.ml_config)
-        elif self.algorithm == 'rf':
-            return RandomForestEstimator(**self.ml_config)
-        else:
-            raise ValueError(f"Method {self.algorithm} not supported.")
+        """Factory algorithm to select the right internal class.
+
+        `algorithm` accepts any PyCaret classification model ID (e.g. 'xgboost', 'rf',
+        'lr', 'dt', 'lightgbm', ...) or 'best' to auto-select via PyCaret's compare_models().
+        Invalid model IDs are rejected by PyCaret itself.
+        """
+        return PyCaretEstimator(algorithm=self.algorithm, **self.ml_config)
 
     def fit(self, X, y):
         self.estimator_ = self._initialize_estimator()
